@@ -29,6 +29,7 @@ import { BuildingMode, setLearnedPlaceables } from './ui/building.ts'
 import { LessonGuide } from './ui/lesson.ts'
 import { Menu, setLearnedRecipes } from './ui/menu.ts'
 import { PeoplePanels } from './ui/people.ts'
+import { NarrativePanel } from './ui/narrative.ts'
 import { SkillBar } from './ui/skillbar.ts'
 import { Tooltip, setLearnedStatuses, type TipContext } from './ui/tooltip.ts'
 import { Minimap } from './ui/worldmap.ts'
@@ -41,6 +42,7 @@ import './ui/game.css'
 import './ui/polish.css'
 import './ui/fishing.css'
 import './ui/research.css'
+import './ui/narrative.css'
 
 const PARAMS = new URLSearchParams(location.search)
 /** Where this game's saves are kept (its own, beside other games' on the same page). */
@@ -230,6 +232,13 @@ hud.onAbility = (index: number) => {
   }
   pickAbility(a)
 }
+/** The story panel: words in, a validated turn out (the pipeline runs in the engine worker). */
+const narrative = new NarrativePanel({
+  ask: (text) => send({ t: 'narrative', text }),
+  clarify: (choice) => send({ t: 'narrativeClarify', choice }),
+  regenerate: (turnId) => send({ t: 'narrativeRegenerate', turnId }),
+})
+if (import.meta.env.DEV) Object.assign((window as unknown as { lsw: object }).lsw, { narrative })
 const research = new ResearchWindow({
   ask: (message) => send({ t: 'researchAsk', message }), confirm: (token) => send({ t: 'researchConfirm', token }), cancel: () => send({ t: 'researchCancel' }),
   trial: (id, revision) => send({ t: 'workshopTrial', id, revision }), adopt: (id, revision) => send({ t: 'workshopAdopt', id, revision }),
@@ -690,6 +699,9 @@ worker.onmessage = (ev: MessageEvent<FromWorker>) => {
     case 'codex':
       menu.onCodex(m.codex)
       break
+    case 'narrative':
+      narrative.show(m.view)
+      break
     case 'slotMove':
       menu.onMoveSlotResult(m.request, m.moved)
       break
@@ -1119,6 +1131,8 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') (document.activeElement as HTMLElement).blur()
     return
   }
+  // the story panel closes on Esc before the menu opens
+  if (narrative.open && e.code === 'Escape') return void (e.preventDefault(), narrative.toggle(false))
   if (!document.getElementById('intro')!.classList.contains('hidden')) return
   // the death screen and the title take no keys: their buttons are what may follow (no journal over them)
   if (death.open || cover.open) return

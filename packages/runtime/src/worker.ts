@@ -16,7 +16,10 @@ import { peopleViews, travelToWaypoint, waypoints, cast, dash, fishingActive, fi
 import { game as played, ontology, placementById, professionById, recipeById, skillById } from './game.ts'
 import { settleOpenQuestions, withOpenQuestions } from './saves.ts'
 import { linkAgents } from './agentLink.ts'
-import { routeFishingWorkerInput, type StoredLibrary, type Atlas, type AtlasContinent, type AtlasMap, type FromWorker, type LibraryView, type RecordView, type SaveSummary, type Tile, type ToWorker } from './protocol.ts'
+import { kvDel, kvGet, kvSet } from './storage.ts'
+import { createNarrativeRuntime } from './narrative/index.ts'
+import type { TurnResult } from '@openworld/narration'
+import { routeFishingWorkerInput, type StoredLibrary, type Atlas, type AtlasContinent, type AtlasMap, type FromWorker, type LibraryView, type RecordView, type SaveSummary, type Tile, type ToWorker, type NarrativeView } from './protocol.ts'
 
 const TICK_MS = 100
 /**
@@ -35,6 +38,8 @@ let nextTransferFrame = 0
 
 let base = ''
 let index: WorldIndex
+/** The narrative turn machine of the game on the table (packages/narration, by way of narrative/). */
+let narrative: ReturnType<typeof createNarrativeRuntime> | undefined
 let game: Game | undefined
 let agentHost: AgentHost | undefined
 let agentsLink: { stop(): void } | undefined
@@ -1166,6 +1171,8 @@ async function begin(init: Extract<ToWorker, { t: 'init' }>, fresh: boolean, min
   if (mine !== generation) return
   agentHost = new AgentHost(game.engine)
   post({ t: 'ready', stats: index.stats, name: index.name, resumed: !!init.save && !fresh && compatible })
+  // the story loads beside the game, never in front of it: a slow store cannot hold up play
+  void startNarrative()
   artSent.clear()
   sendArts()
   // a new game: whatever the main thread was told before, it is told again
@@ -1184,6 +1191,95 @@ async function begin(init: Extract<ToWorker, { t: 'init' }>, fresh: boolean, min
       post({ t: 'error', message: (err as Error).stack ?? String(err) })
     }
   }, TICK_MS)
+}
+
+
+// ------------------------------------------------------------------ narrative turns
+
+/** The panel's whole state, from the machine's own record. */
+function narrativeView(result?: TurnResult, notice?: string): NarrativeView {
+  const snap = narrative!.machine.snapshot()
+  return {
+    status: result?.status ?? 'idle',
+    chapter: snap.chapter,
+    lines: snap.lines.map((line) => {
+      const name = line.speakerId ? game?.engine.world.get(line.speakerId)?.name : undefined
+      return {
+        role: line.role,
+        text: line.text,
+        ...(line.speakerId ? { speakerId: line.speakerId } : {}),
+        ...(name ? { speakerName: typeof name === 'string' ? name : name.en } : {}),
+      }
+    }),
+    turns: snap.turns,
+    memories: snap.memories,
+    ...(result?.question ? { question: result.question } : snap.pending ? { question: snap.pending.question } : {}),
+    ...(result?.choices ? { choices: result.choices } : snap.pending ? { choices: snap.pending.choices } : {}),
+    ...(result?.errors?.length ? { errors: result.errors } : {}),
+    ...(result?.turnId ? { turnId: result.turnId } : {}),
+    ...(result ? { committed: result.committed, persisted: result.persisted } : {}),
+    ...(notice ? { notice } : {}),
+  }
+}
+
+/** A pre-turn snapshot: the game's own save, deep-cloned so later ticks cannot change it. */
+function narrativeSnapshot(): unknown {
+  if (!game) throw new Error('no game')
+  return structuredClone(game.save({ whole: true }))
+}
+
+/** Restore a snapshot before a mutating turn is replayed (§9.2). The map data comes back after. */
+function restoreGame(token: unknown): void {
+  if (!game) throw new Error('no game to restore')
+  const save = token as Parameters<typeof Game.load>[0]
+  const restored = Game.load(save, index, ontology(), game.engine.lib, played().upgradeSave)
+  restored.worldVersion = index.version
+  restored.keepMaps = KEEP_MAPS
+  restored.engine.quality = quality
+  restored.engine.companions.guiding = guiding
+  restored.engine.fastForwardChunk = TICKS_PER_HOUR
+  for (const skill of played().skills.all) restored.engine.skills.set(skill.id, skill)
+  restored.mods.onChange = () => sendRecords()
+  game = restored
+  frames.reset()
+  view = undefined
+  lastMap = ''
+  const here = restored.engine.world.posOf(restored.engine.world.player)?.map
+  if (here) {
+    void chunkFor(here)
+      .then((chunk) => {
+        restored.loadChunk(chunk)
+        frames.reset()
+      })
+      .catch((err) => post({ t: 'error', message: `could not restore map ${here}: ${(err as Error).message}` }))
+  }
+  void ensureMaps()
+}
+
+/** Wire the turn machine to the game just begun or loaded, and tell the page what the story holds. */
+async function startNarrative(): Promise<void> {
+  narrative = undefined
+  if (!game || !index) return
+  const runtime = createNarrativeRuntime({
+    game: () => game,
+    worldId: `${base}|${index.version}`,
+    contentVersion: index.version,
+    kv: { get: kvGet, set: kvSet, del: kvDel },
+    snapshot: narrativeSnapshot,
+    restore: restoreGame,
+  })
+  narrative = runtime
+  try {
+    const report = await runtime.machine.load()
+    const notice = report.invalidated
+      ? 'This world changed; the story begins again here.'
+      : report.interrupted
+        ? 'An interrupted turn was found. Nothing is claimed about what happened.'
+        : undefined
+    post({ t: 'narrative', view: narrativeView(undefined, notice) })
+  } catch (err) {
+    post({ t: 'error', message: `narrative: ${(err as Error).message}` })
+  }
 }
 
 self.onmessage = async (ev: MessageEvent<ToWorker>) => {
@@ -1589,6 +1685,21 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
         // the player will not wait: the act's default now, the question answered later if it comes
         const a = game?.mods.asking
         if (a) game!.mods.fallback(a.id, true)
+        break
+      }
+      case 'narrative': {
+        if (!game || !narrative) break
+        post({ t: 'narrative', view: narrativeView(await narrative.machine.submit(m.text.slice(0, 500))) })
+        break
+      }
+      case 'narrativeClarify': {
+        if (!narrative) break
+        post({ t: 'narrative', view: narrativeView(await narrative.machine.clarify(m.choice)) })
+        break
+      }
+      case 'narrativeRegenerate': {
+        if (!narrative) break
+        post({ t: 'narrative', view: narrativeView(await narrative.machine.regenerate(m.turnId)) })
         break
       }
       case 'debug': {

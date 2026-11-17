@@ -1,1 +1,7 @@
-{ "name": "@openworld/narration", "private": true, "type": "module" }
+{
+  "name": "@openworld/narration",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

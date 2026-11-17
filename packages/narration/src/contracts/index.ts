@@ -1,21 +1,25 @@
 /**
- * Contract layer for the AI-driven RPG project.
- * Pure functions, no model calls, no engine imports.
- * 
- * ActionProposal: strict model-emitted object describing what someone tries to do.
- * NarrativeOutput: speaker-tagged prose, structurally validated, never authoritative.
+ * Contract layer for the AI-driven RPG.
  *
- * These schemas and validators replace the single-contract design of Reports 05/06/10/12
- * with three separate contracts (RulePatch, ActionProposal, NarrativeOutput) as
- * established by Revision 2 corrections C-01 through C-03.
+ * Pure functions and data: no model calls, no engine mutation. Three contracts sit between
+ * a model and the world (Revision 2 corrections C-01…C-03):
+ *
+ *  - ActionProposal  what someone tries to do — validated, then mapped to one engine act.
+ *  - NarrativeOutput speaker-tagged prose — structurally validated, never authoritative.
+ *  - RulePatch       a proposed rule answer — separate from ordinary play, permissioned.
+ *
+ * Nothing here mutates WorldState. The engine alone decides what happened.
  */
 
-import type { Id, Verb } from '@openworld/engine/types'
-import type { Resolution } from '@openworld/engine/rules'
+import type { Id, Mood, Resolution, Verb } from '@openworld/engine'
+
+/** The seven verbs the engine accepts (engine/types.ts:1762). */
+export const VERBS = ['use', 'put', 'take', 'hands', 'move', 'craft', 'learn'] as const
+const VERB_SET: ReadonlySet<string> = new Set(VERBS)
 
 /**
- * Proposal params — a closed record. Every key below is taken from a verified `act()` call
- * site (controls.ts). Nothing from a model is accepted outside this set.
+ * Proposal params — a closed record. Every key is taken from a verified `act()` call site
+ * (engine/controls.ts). Nothing outside this set survives validation.
  */
 export type ProposalParams = {
   say?: string | null
@@ -31,14 +35,10 @@ export type ProposalParams = {
   at?: Id
 }
 
-/**
- * The seven verbs the engine accepts (design.md §5.7, types.ts:1762).
- */
-export const VERBS: ReadonlySet<Verb> = new Set(['use', 'put', 'take', 'hands', 'move', 'craft', 'learn'])
-
-/** ActionProposal — a new, strict, model-emitted object describing what someone tries to do. */
+/** A strict, model-emitted object describing what someone tries to do. */
 export type ActionProposal =
-  | { kind: 'action'
+  | {
+      kind: 'action'
       actorId: Id
       verb: Verb
       target: { e: Id }
@@ -47,282 +47,277 @@ export type ActionProposal =
       intentText: string
       confidence: number
     }
-  | { kind: 'no-action'
-      reason: 'talk' | 'question' | 'emote' | 'nothing'
-    }
-  | { kind: 'ambiguous'
-      candidates: ActionProposal[]
-      question: string }
+  | { kind: 'no-action'; reason: 'talk' | 'question' | 'emote' | 'nothing' }
+  | { kind: 'ambiguous'; candidates: ActionProposal[]; question: string }
 
-/** Verdict from validation — ok, or rejected with errors. */
+/** Ok, or rejected with human-readable reasons. */
 export type Verdict = { ok: true } | { ok: false; errors: string[] }
 
-/** NarrativeBlock — a speaker-tagged prose block. */
+const ok: Verdict = { ok: true }
+const bad = (...errors: string[]): Verdict => ({ ok: false, errors })
+
+/** A speaker-tagged block of prose. */
 export type NarrativeBlock =
   | { speaker: { kind: 'narrator' }; text: string }
-  | { speaker: { kind: 'character'; entityId: Id }; text: string; mood?: 'neutral' | 'happy' | 'sad' | 'angry' | 'surprised' | 'shy' }
+  | { speaker: { kind: 'character'; entityId: Id }; text: string; mood?: Mood }
 
-/** NarrativeOutput — speaker-tagged prose, structurally validated, never authoritative. */
+export const MOODS: readonly Mood[] = ['neutral', 'happy', 'sad', 'angry', 'surprised', 'shy']
+
+/** Speaker-tagged prose, structurally validated, never authoritative. */
 export type NarrativeOutput = {
   turnId: string
   blocks: NarrativeBlock[]
   meta: { model: string; purpose: 'narration'; keptTokens?: number }
 }
 
-/** Validation context for ActionProposal. */
+/** Validation context for an ActionProposal: who acts, over what, with which verbs. */
 export interface ActionProposalCtx {
-  seat: Id                        // the actor the turn belongs to
-  visible: (id: Id) => boolean   // referent check against the turn's projection
-  verbs: readonly Verb[]         // the engine's seven
+  /** The actor the turn belongs to. A proposal for anyone else is rejected outright. */
+  seat: Id
+  /** Referent check against the turn's projection. */
+  visible: (id: Id) => boolean
+  /** The engine's seven (or the subset this world offers). */
+  verbs: readonly Verb[]
+  /** The talk verbs available with someone (engine/npc lines). */
   talkVerbs: (who: Id) => readonly string[]
 }
 
-/** Validation context for NarrativeOutput. */
+/** Validation context for a NarrativeOutput. */
 export interface NarrativeOutputCtx {
-  cast: (id: Id) => boolean      // speakers allowed this turn
+  /** Speakers allowed this turn: those on the map, or met in it. */
+  cast: (id: Id) => boolean
+  /** The player may not be made to speak by the narrator. */
   player: Id
   limits: { blocks: number; chars: number }
 }
 
-/** Validate an ActionProposal against the four-layer check (R2-02 §4.3). */
-export function validateActionProposal(
-  p: unknown,
-  ctx: ActionProposalCtx
-): Verdict {
-  // 1. Schema: types, closed params, lengths, verb in the seven, kind discriminants
-  if (typeof p !== 'object' || p === null || ('kind' in p === false)) {
-    return { ok: false; errors: ['expected ActionProposal object'] }
-  }
-
-  const proposal = p as Record<string, unknown>
-
-  // kind discriminant
-  const kind = proposal.kind
-  if (kind === undefined || typeof kind !== 'string') {
-    return { ok: false; errors: ['missing or invalid kind'] }
-  }
-
-  // ---- kind: 'action' ----
-  if (kind === 'action') {
-    // actorId exists and is the seat that owns the turn
-    const actorId = proposal.actorId
-    if (typeof actorId !== 'string' || actorId === '') {
-      return { ok: false; errors: ['actorId must be a non-empty string'] }
-    }
-
-    // verb in the seven
-    const verb = proposal.verb
-    if (typeof verb !== 'string' || !VERBS.has(verb as Verb)) {
-      return { ok: false; errors: [`verb must be one of: ${Array.from(VERBS).join(', ')}`] }
-    }
-
-    // target: { e: Id }
-    const target = proposal.target
-    if (typeof target !== 'object' || target === null || !('e' in target) || typeof (target as any).e !== 'string') {
-      return { ok: false; errors: ['target must be { e: Id }'] }
-    }
-
-    // instrument?: { e: Id } | null
-    const instrument = proposal.instrument
-    if (instrument !== undefined && instrument !== null) {
-      if (typeof instrument !== 'object' || !('e' in instrument) || typeof (instrument as any).e !== 'string') {
-        return { ok: false; errors: ['instrument must be { e: Id } or null'] }
-      }
-    }
-
-    // params: ProposalParams (closed record)
-    const params = proposal.params
-    if (typeof params !== 'object' || params === null) {
-      return { ok: false; errors: ['params must be an object'] }
-    }
-    // Validate specific params keys
-    if (typeof params.say !== 'string' && params.say !== undefined) {
-      return { ok: false; errors: ['say must be a string or undefined'] }
-    }
-    if (typeof params.quest !== 'string' && params.quest !== undefined) {
-      return { ok: false; errors: ['quest must be a string ID or undefined'] }
-    }
-    if (typeof params.topic !== 'string' && params.topic !== undefined) {
-      return { ok: false; errors: ['topic must be a string or undefined'] }
-    }
-    if (typeof params.choice !== 'string' && params.choice !== undefined) {
-      return { ok: false; errors: ['choice must be a string or undefined'] }
-    }
-    if (typeof params.item !== 'string' && params.item !== undefined) {
-      return { ok: false; errors: ['item must be a string ID or undefined'] }
-    }
-    if (typeof params.into !== 'string' && params.into !== undefined) {
-      return { ok: false; errors: ['into must be a string or undefined'] }
-    }
-    if (typeof params.dir !== 'string' && params.dir !== undefined) {
-      return { ok: false; errors: ['dir must be a string or undefined'] }
-    }
-    if (typeof params.skill !== 'string' && params.skill !== undefined) {
-      return { ok: false; errors: ['skill must be a string ID or undefined'] }
-    }
-    if (typeof params.profession !== 'string' && params.prospection !== undefined) {
-      return { ok: false; errors: ['profession must be a string ID or undefined'] }
-    }
-    if (typeof params.recipe !== 'string' && params.recipe !== undefined) {
-      return { ok: false; errors: ['recipe must be a string ID or undefined'] }
-    }
-    if (typeof params.at !== 'string' && params.at !== undefined) {
-      return { ok: false; errors: ['at must be a string ID or undefined'] }
-    }
-
-    // intentText: string
-    const intentText = proposal.intentText
-    if (typeof intentText !== 'string' || intentText === '') {
-      return { ok: false; errors: ['intentText must be a non-empty string'] }
-    }
-
-    // confidence: number 0..1
-    const confidence = proposal.confidence
-    if (typeof confidence !== 'number' || confidence < 0 || confidence > 1) {
-      return { ok: false; errors: ['confidence must be a number between 0 and 1'] }
-    }
-
-    return { ok: true }
-  }
-
-  // ---- kind: 'no-action' ----
-  if (kind === 'no-action') {
-    const reason = proposal.reason
-    if (typeof reason !== 'string' || !['talk', 'question', 'emote', 'nothing'].includes(reason)) {
-      return { ok: false; errors: ["reason must be 'talk'|'question'|'emote'|'nothing'"] }
-    }
-    return { ok: true }
-  }
-
-  // ---- kind: 'ambiguous' ----
-  if (kind === 'ambiguous') {
-    const candidates = proposal.candidates
-    if (!Array.isArray(candidates) || candidates.length === 0) {
-      return { ok: false; errors: ['candidates must be a non-empty array'] }
-    }
-    for (const c of candidates) {
-      const verdict = validateActionProposal(c, ctx)
-      if (!verdict.ok) {
-        return { ok: false; errors: [...verdict.errors, 'ambiguous candidate validation failed'] }
-      }
-    }
-    const question = proposal.question
-    if (typeof question !== 'string' || question === '') {
-      return { ok: false; errors: ['question must be a non-empty string'] }
-    }
-    return { ok: true }
-  }
-
-  return { ok: false; errors: ['unknown ActionProposal kind'] ]
+/** A rule answer a model may propose (never applied without permission). */
+export interface RulePatch {
+  id: string
+  /** Why the answer is proposed, in the proposer's words. */
+  note: string
+  /** The host type the answer is for. */
+  hostType: string
+  /** The event kind, e.g. `act/take`. */
+  on: string
+  /** The hole's key (rules.ts holeKey) when the answer fills a hole. */
+  hole?: string
+  /** The leaf's effects, in the engine's effect language. */
+  effects: RuleEffect[]
+  confidence: number
 }
 
-/** Validate a NarrativeOutput against structural limits (R2-02 §5.2–5.3). */
-export function validateNarrativeOutput(
-  o: unknown,
-  ctx: NarrativeOutputCtx
-): Verdict {
-  if (typeof o !== 'object' || o === null || ('turnId' in o === false)) {
-    return { ok: false; errors: ['expected NarrativeOutput object'] }
+/** One effect of a proposed rule answer. */
+export interface RuleEffect {
+  op: string
+  text?: string
+  to?: string
+  amount?: number
+  prop?: string
+  value?: string | number | boolean
+  status?: string
+  ticks?: number
+  item?: string
+  [key: string]: unknown
+}
+
+/** Ops a proposed rule may use. Anything else is rejected before it reaches the engine. */
+export const RULE_EFFECT_OPS: ReadonlySet<string> = new Set([
+  'log', 'say', 'vfx', 'emote', 'damage', 'heal', 'setProp', 'addStatus', 'removeStatus',
+  'spawn', 'remove', 'teleport', 'give', 'setFact', 'delta', 'move', 'none',
+])
+
+export interface RulePatchCtx {
+  /** Types the world may grow an answer for. */
+  hostTypes: (type: string) => boolean
+  /** Event kinds the world knows. */
+  kinds: (kind: string) => boolean
+  /** Whether the proposer may change rules at all this turn. */
+  allowed: boolean
+}
+
+// ------------------------------------------------------------------ ActionProposal
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null
+}
+
+const STRING_PARAMS = [
+  'say', 'quest', 'topic', 'choice', 'item', 'into', 'dir', 'skill', 'profession', 'recipe', 'at',
+] as const
+
+/**
+ * Validate an ActionProposal against the four layers (R2-02 §4.3):
+ * schema, authority (the seat), reference (what the turn can see), permission (verbs and talk).
+ */
+export function validateActionProposal(p: unknown, ctx: ActionProposalCtx, depth = 0): Verdict {
+  if (!isRecord(p)) return bad('expected an ActionProposal object')
+  const kind = p.kind
+  if (typeof kind !== 'string') return bad('missing or invalid kind')
+
+  if (kind === 'action') {
+    if (typeof p.actorId !== 'string' || p.actorId === '') return bad('actorId must be a non-empty string')
+    // authority: a proposal may only act for the seat that owns this turn
+    if (p.actorId !== ctx.seat) return bad(`actorId ${p.actorId} is not the seat of this turn`)
+
+    if (typeof p.verb !== 'string' || !VERB_SET.has(p.verb)) {
+      return bad(`verb must be one of: ${VERBS.join(', ')}`)
+    }
+    if (!ctx.verbs.includes(p.verb as Verb)) return bad(`verb ${p.verb} is not offered in this world`)
+
+    if (!isRecord(p.target) || typeof p.target.e !== 'string' || p.target.e === '') {
+      return bad('target must be { e: Id }')
+    }
+    if (!ctx.visible(p.target.e)) return bad(`target ${p.target.e} is not in the turn's view`)
+
+    if (p.instrument !== undefined && p.instrument !== null) {
+      if (!isRecord(p.instrument) || typeof p.instrument.e !== 'string' || p.instrument.e === '') {
+        return bad('instrument must be { e: Id } or null')
+      }
+      if (!ctx.visible(p.instrument.e)) return bad(`instrument ${p.instrument.e} is not in the turn's view`)
+    }
+
+    if (!isRecord(p.params)) return bad('params must be an object')
+    for (const key of Object.keys(p.params)) {
+      if (!(STRING_PARAMS as readonly string[]).includes(key)) return bad(`params.${key} is not an accepted parameter`)
+    }
+    for (const key of STRING_PARAMS) {
+      const value = p.params[key]
+      if (value !== undefined && value !== null && typeof value !== 'string') return bad(`params.${key} must be a string`)
+    }
+    if (p.params.into !== undefined && p.params.into !== null && p.params.into !== 'contents') {
+      return bad("params.into may only be 'contents'")
+    }
+    if (p.params.dir !== undefined && p.params.dir !== null && !['up', 'down', 'left', 'right'].includes(String(p.params.dir))) {
+      return bad("params.dir must be 'up'|'down'|'left'|'right'")
+    }
+    if (typeof p.params.say === 'string' && p.params.say !== '') {
+      const offered = ctx.talkVerbs(p.target.e)
+      if (!offered.includes(p.params.say) && !offered.includes('*')) {
+        return bad(`say '${p.params.say}' is not something one may say to ${p.target.e}`)
+      }
+    }
+
+    if (typeof p.intentText !== 'string' || p.intentText.trim() === '') return bad('intentText must be a non-empty string')
+    if (p.intentText.length > 500) return bad('intentText is too long')
+    if (typeof p.confidence !== 'number' || !Number.isFinite(p.confidence) || p.confidence < 0 || p.confidence > 1) {
+      return bad('confidence must be between 0 and 1')
+    }
+    return ok
   }
 
-  const output = o as Record<string, unknown>
-
-  // turnId: string
-  const turnId = output.turnId
-  if (typeof turnId !== 'string' || turnId === '') {
-    return { ok: false; errors: ['turnId must be a non-empty string'] }
+  if (kind === 'no-action') {
+    if (typeof p.reason !== 'string' || !['talk', 'question', 'emote', 'nothing'].includes(p.reason)) {
+      return bad("reason must be 'talk'|'question'|'emote'|'nothing'")
+    }
+    return ok
   }
 
-  // blocks: NarrativeBlock[], 1–6 blocks
-  const blocks = output.blocks
-  if (!Array.isArray(blocks)) {
-    return { ok: false; errors: ['blocks must be an array'] }
-  }
-  if (blocks.length < 1 || blocks.length > 6) {
-    return { ok: false; errors: ['blocks must be between 1 and 6, inclusive'] }
+  if (kind === 'ambiguous') {
+    if (depth > 2) return bad('alternatives nested too deeply')
+    if (!Array.isArray(p.candidates) || p.candidates.length === 0) return bad('candidates must be a non-empty array')
+    if (p.candidates.length > 6) return bad('candidates must be at most 6')
+    for (const candidate of p.candidates) {
+      // an alternative inside an alternative is not accepted: only plain actions are
+      if (!isRecord(candidate) || candidate.kind !== 'action') return bad('every candidate must be a plain action')
+      const verdict = validateActionProposal(candidate, ctx, depth + 1)
+      if (!verdict.ok) return bad(...verdict.errors, 'an alternative failed validation')
+    }
+    const targets = new Set(p.candidates.map((c) => JSON.stringify((c as { target?: unknown }).target)))
+    if (targets.size !== p.candidates.length) return bad('candidates must differ')
+    if (typeof p.question !== 'string' || p.question.trim() === '') return bad('question must be a non-empty string')
+    if (p.question.length > 300) return bad('question is too long')
+    return ok
   }
 
-  // Validate each block
+  return bad(`unknown ActionProposal kind '${kind}'`)
+}
+
+// ------------------------------------------------------------------ NarrativeOutput
+
+/** Validate a NarrativeOutput against structure and the turn's cast (R2-02 §5.2–5.3). */
+export function validateNarrativeOutput(o: unknown, ctx: NarrativeOutputCtx): Verdict {
+  if (!isRecord(o)) return bad('expected a NarrativeOutput object')
+  if (typeof o.turnId !== 'string' || o.turnId === '') return bad('turnId must be a non-empty string')
+  const blocks = o.blocks
+  if (!Array.isArray(blocks)) return bad('blocks must be an array')
+  if (blocks.length < 1 || blocks.length > ctx.limits.blocks) {
+    return bad(`blocks must be between 1 and ${ctx.limits.blocks}`)
+  }
+
+  let chars = 0
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i]
-    if (typeof block !== 'object' || block === null || ('speaker' in block === false)) {
-      return { ok: false; errors: [`block ${i}: missing speaker`] }
-    }
+    if (!isRecord(block)) return bad(`block ${i}: expected an object`)
+    if (!isRecord(block.speaker) || typeof block.speaker.kind !== 'string') return bad(`block ${i}: missing speaker`)
+    if (typeof block.text !== 'string' || block.text.trim() === '') return bad(`block ${i}: text must be non-empty`)
+    chars += block.text.length
 
     const speaker = block.speaker
-    if (typeof speaker !== 'object' || speaker === null || ('kind' in speaker === false)) {
-      return { ok: false; errors: [`block ${i}: speaker must have kind`] }
-    }
-
-    const kind = speaker.kind
-    if (kind === 'narrator') {
-      // { speaker: { kind: 'narrator' }; text: string }
-      const text = block.text
-      if (typeof text !== 'string' || text === '') {
-        return { ok: false; errors: [`block ${i}: narrator text must be a non-empty string`] }
-      }
-      // Block count limit already checked above
-    } else if (kind === 'character') {
-      // { speaker: { kind: 'character'; entityId: Id }; text: string; mood?: Mood }
-      const entityId = speaker.entityId
-      if (typeof entityId !== 'string' || entityId === '') {
-        return { ok: false; errors: [`block ${i}: character entityId must be a non-empty string`] }
-      }
-
-      // Check speaker is allowed (present on active map or in scene's cast list)
-      // This is enforced by the NarrationOutputCtx.cast check at a higher level
-
-      const text = block.text
-      if (typeof text !== 'string' || text === '') {
-        return { ok: false; errors: [`block ${i}: character text must be a non-empty string`] }
-      }
-
-      // mood check if present
-      if ('mood' in block) {
-        const mood = block.mood
-        if (typeof mood !== 'string' || !['neutral', 'happy', 'sad', 'angry', 'surprised', 'shy'].includes(mood)) {
-          return { ok: false; errors: [`block ${i}: mood must be engine union or undefined`] }
-        }
-      } else {
-        // default mood when not specified
-        // (no default assigned - text stands on its own)
-      }
-    } else {
-      return { ok: false; errors: [`block ${i}: unknown speaker kind '${kind}'`] }
+    if (speaker.kind === 'narrator') continue
+    if (speaker.kind !== 'character') return bad(`block ${i}: unknown speaker kind '${String(speaker.kind)}'`)
+    if (typeof speaker.entityId !== 'string' || speaker.entityId === '') return bad(`block ${i}: entityId must be non-empty`)
+    if (speaker.entityId === ctx.player) return bad(`block ${i}: the narrator may not speak for the player`)
+    if (!ctx.cast(speaker.entityId)) return bad(`block ${i}: ${speaker.entityId} is not in this turn's cast`)
+    if ('mood' in block && block.mood !== undefined) {
+      if (typeof block.mood !== 'string' || !MOODS.includes(block.mood as Mood)) return bad(`block ${i}: unknown mood`)
     }
   }
+  if (chars > ctx.limits.chars) return bad(`text is too long (${chars} > ${ctx.limits.chars} characters)`)
 
-  // limits: blocks and chars
-  const limits = output.limits
-  if (typeof limits !== 'object' || limits === null) {
-    return { ok: false; errors: ['limits must be an object'] }
+  if (!isRecord(o.meta)) return bad('meta must be an object')
+  if (typeof o.meta.model !== 'string' || o.meta.model === '') return bad('meta.model must be a non-empty string')
+  if (o.meta.purpose !== 'narration') return bad('meta.purpose must be "narration"')
+  if (o.meta.keptTokens !== undefined && (typeof o.meta.keptTokens !== 'number' || o.meta.keptTokens < 0)) {
+    return bad('meta.keptTokens must be a non-negative number')
   }
-  if (typeof limits.blocks !== 'number' || limits.blocks < 1 || limits.blocks > 6) {
-    return { ok: false; errors: ['limits.blocks must be between 1 and 6'] }
-  }
-  if (typeof limits.chars !== 'number' || limits.chars < 1) {
-    return { ok: false; errors: ['limits.chars must be a positive number'] }
-  }
-
-  // meta: model, purpose, keptTokens?
-  const meta = output.meta
-  if (typeof meta !== 'object' || meta === null || typeof meta.model !== 'string' || meta.model === '') {
-    return { ok: false; errors: ['meta.model must be a non-empty string'] }
-  }
-  if (typeof meta.purpose !== 'string' || meta.purpose !== 'narration') {
-    return { ok: false; errors: ['meta.purpose must be "narration"'] }
-  }
-  if (typeof meta.keptTokens !== 'undefined' && (typeof meta.keptTokens !== 'number' || meta.keptTokens < 0)) {
-    return { ok: false; errors: ['meta.keptTokens must be a non-negative number or undefined'] }
-  }
-
-  // player impersonation check: blocks may not be attributed to the player entity
-  // (this is enforced at the turn machine level, not here structurally)
-
-  return { ok: true }
+  return ok
 }
 
-/** Build a digest from engine Resolution and effects (R2-03 §2.2). */
+// ------------------------------------------------------------------ RulePatch
+
+/** Validate a proposed rule answer. Never applies it: permission and the engine's own checks do. */
+export function validateRulePatch(p: unknown, ctx: RulePatchCtx): Verdict {
+  if (!ctx.allowed) return bad('rule changes are not allowed this turn')
+  if (!isRecord(p)) return bad('expected a RulePatch object')
+  if (typeof p.id !== 'string' || p.id.trim() === '') return bad('id must be a non-empty string')
+  if (typeof p.note !== 'string' || p.note.trim() === '') return bad('note must be a non-empty string')
+  if (p.note.length > 400) return bad('note is too long')
+  if (typeof p.hostType !== 'string' || !ctx.hostTypes(p.hostType)) return bad(`unknown host type '${String(p.hostType)}'`)
+  if (typeof p.on !== 'string' || !ctx.kinds(p.on)) return bad(`unknown event kind '${String(p.on)}'`)
+  if (p.hole !== undefined && (typeof p.hole !== 'string' || p.hole === '')) return bad('hole must be a non-empty string')
+  if (!Array.isArray(p.effects) || p.effects.length === 0) return bad('effects must be a non-empty array')
+  if (p.effects.length > 12) return bad('effects must be at most 12')
+  for (let i = 0; i < p.effects.length; i++) {
+    const effect = p.effects[i]
+    if (!isRecord(effect) || typeof effect.op !== 'string' || !RULE_EFFECT_OPS.has(effect.op)) {
+      return bad(`effect ${i}: unknown op`)
+    }
+    if (effect.text !== undefined && typeof effect.text !== 'string') return bad(`effect ${i}: text must be a string`)
+  }
+  if (typeof p.confidence !== 'number' || !Number.isFinite(p.confidence) || p.confidence < 0 || p.confidence > 1) {
+    return bad('confidence must be between 0 and 1')
+  }
+  return ok
+}
+
+// ------------------------------------------------------------------ OutcomeDigest
+
+/** One narratable fact the engine produced. */
+export interface DigestFact {
+  kind: 'say' | 'remark' | 'log' | 'emote' | 'vfx'
+  who?: Id
+  text?: string
+  mood?: string
+}
+
+/** One change the engine made, in words the narrator may repeat. */
+export interface DigestChange {
+  entityId: Id
+  summary: string
+}
+
+/** What a narrator may describe: only what the engine did (R2-03 §2.2). */
 export interface OutcomeDigest {
   turnId: string
   worldRevision: number
@@ -339,80 +334,81 @@ export interface OutcomeDigest {
     ruleId?: string
     fault?: string
   }
-  facts: {
-    kind: 'say' | 'remark' | 'log' | 'emote' | 'vfx'
-    who?: Id
-    text?: string
-  }[]
-  changes: {
-    entityId: Id
-    summary: string
-  }[]
+  facts: DigestFact[]
+  changes: DigestChange[]
   mutated: boolean
 }
 
-/** Build an OutcomeDigest from a Resolution and the engine's fx output. */
+/** An effect as the engine's fx queue (or a normalised adapter) gives it. */
+export interface DigestFx {
+  op: string
+  to?: string
+  params?: Record<string, unknown>
+}
+
+const FACT_KINDS: Record<string, DigestFact['kind']> = {
+  say: 'say',
+  remark: 'remark',
+  log: 'log',
+  emote: 'emote',
+  vfx: 'vfx',
+}
+
+/** Build an OutcomeDigest from a Resolution, the fx it produced, and before/after reads. */
 export function buildDigest(
   turnId: string,
   worldRevision: number,
   resolution: Resolution,
-  fx: { op: string; to: string; params?: Record<string, unknown> }[],
-  before: Record<Id, { hp?: number; maxHp?: number }>,
-  after: Record<Id, { hp?: number; maxHp?: number }>,
-  proposal?: { verb: Verb; target: Id; params: object; accepted: boolean; rejection?: string }
+  fx: readonly DigestFx[],
+  before: Readonly<Record<Id, { hp?: number; maxHp?: number }>>,
+  after: Readonly<Record<Id, { hp?: number; maxHp?: number }>>,
+  proposal?: OutcomeDigest['proposal'],
 ): OutcomeDigest {
-  const facts: OutcomeDigest['facts'] = []
-  const changes: OutcomeDigest['changes'] = []
+  const facts: DigestFact[] = []
+  const changes: DigestChange[] = []
 
-  // Collect facts from fx entries that produce narratable output
   for (const effect of fx) {
-    switch (effect.op) {
-      case 'say':
-        facts.push({ kind: 'say', who: typeof effect.to === 'string' ? effect.to as Id : undefined, text: effect.params?.text as string | undefined })
-        break
-      case 'emote':
-        facts.push({ kind: 'emote', who: typeof effect.to === 'string' ? effect.to as Id : undefined, text: effect.params?.text as string | undefined })
-        break
-      case 'log':
-        facts.push({ kind: 'log' })
-        break
-      case 'vfx':
-        facts.push({ kind: 'vfx' })
-        break
-      case 'remark':
-        facts.push({ kind: 'remark', who: typeof effect.to === 'string' ? effect.to as Id : undefined, text: effect.params?.text as string | undefined })
-        break
-    }
+    const kind = FACT_KINDS[effect.op]
+    if (!kind) continue
+    const text = typeof effect.params?.text === 'string' ? effect.params.text : undefined
+    const mood = typeof effect.params?.mood === 'string' ? effect.params.mood : undefined
+    facts.push({
+      kind,
+      ...(typeof effect.to === 'string' && effect.to !== '' ? { who: effect.to } : {}),
+      ...(text !== undefined ? { text } : {}),
+      ...(mood !== undefined ? { mood } : {}),
+    })
   }
 
-  // Collect changes from before/after entity states
   for (const entityId of Object.keys(after)) {
-    const beforeEnt = before[entityId as Id]
-    const afterEnt = after[entityId as Id]
-    const hpChanged = (beforeEnt?.hp ?? 0) !== (afterEnt?.hp ?? 0)
-    if (hpChanged || beforeEnt?.hp !== afterEnt?.hp) {
+    const was = before[entityId]
+    const now = after[entityId]
+    if (!now) continue
+    const hpBefore = was?.hp ?? 0
+    const hpAfter = now.hp ?? 0
+    if (hpBefore !== hpAfter) {
       changes.push({
-        entityId: entityId as Id,
-        summary: hpChanged ? `hp: ${afterEnt?.hp ?? 0}` : 'state change'
+        entityId,
+        summary: hpAfter > hpBefore
+          ? `healed ${hpAfter - hpBefore} (${hpAfter} of ${now.maxHp ?? '?'})`
+          : `took ${hpBefore - hpAfter} harm (${hpAfter} of ${now.maxHp ?? '?'})`,
       })
     }
   }
 
-  // Determine if the turn mutated world state
-  const mutated = resolution.defined && !resolution.hole // defined outcome with no hole = mutation
-
   return {
     turnId,
     worldRevision,
-    proposal,
+    ...(proposal ? { proposal } : {}),
     resolution: {
       defined: resolution.defined,
       filledHole: resolution.hole !== undefined,
-      ruleId: resolution.rule?.id,
-      fault: resolution.fault
+      ...(resolution.rule?.id ? { ruleId: resolution.rule.id } : {}),
+      ...(resolution.fault ? { fault: resolution.fault.reason ?? resolution.fault.rule } : {}),
     },
     facts,
     changes,
-    mutated
+    // a defined outcome changes the world; a hole left open does not
+    mutated: resolution.defined && resolution.hole === undefined,
   }
 }

@@ -58,6 +58,9 @@ export class FishingInputLatch {
 
 export type ToWorker =
   | { t: 'skipLearning' }
+  | { t: 'narrative'; text: string }
+  | { t: 'narrativeClarify'; choice: number }
+  | { t: 'narrativeRegenerate'; turnId: string }
   | { t: 'researchAsk'; message: string }
   | { t: 'creatorRestartFailed'; job: string; reason: string }
   | { t: 'researchConfirm'; token: string }
@@ -282,6 +285,7 @@ export type FromWorker =
   /** The world map's data: the visited maps where they lie, their terrain, the waypoint stones. */
   | { t: 'atlas'; atlas: Atlas }
   | { t: 'codex'; codex: CodexView }
+  | { t: 'narrative'; view: NarrativeView }
 
 export interface AtlasMap {
   id: string
@@ -336,4 +340,39 @@ export interface SaveSummary {
   difficulty?: Difficulty
   /** A hardcore game whose one life is spent: kept as it ended, never played on. */
   ended?: boolean
+}
+
+// ------------------------------------------------------------------ narrative
+
+/** One line of the story transcript, as the panel shows it. */
+export interface NarrativeLineView {
+  role: 'player' | 'narrator' | 'character' | 'system'
+  text: string
+  speakerId?: string
+  /** The speaker's name, when the worker knows it. */
+  speakerName?: string
+}
+
+export interface NarrativeChoiceView {
+  index: number
+  label: string
+}
+
+/** The narrative panel's whole state, sent after every turn and on loading a game. */
+export interface NarrativeView {
+  status: 'idle' | 'narrated' | 'executed' | 'clarification_required' | 'rejected' | 'failed'
+  chapter: string
+  lines: NarrativeLineView[]
+  question?: string
+  choices?: NarrativeChoiceView[]
+  errors?: string[]
+  turnId?: string
+  /** The engine changed the world this turn. */
+  committed?: boolean
+  /** The completed turn reached the store. */
+  persisted?: boolean
+  turns: number
+  memories: number
+  /** Something about this load (interrupted, invalidated), said once. */
+  notice?: string
 }
