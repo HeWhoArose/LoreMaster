@@ -1,0 +1,362 @@
+// Looks (docs/looks.md): one record per body, the map sprite, the portrait and the look's tags and words all drawn
+// from it. The table is whole (every part has its words, its tags' words and its map grids), every person's look
+// is a valid look of it, distinct from everyone else's, the same every time, and what it says agrees with what
+// it draws.
+
+// the game handed to the runtime first, as its pages do (client/src/register.ts)
+import '../../client/src/register.ts'
+import { describe, expect, it } from 'vitest'
+import { LOOK_BODIES, LOOK_COLORS, LOOK_PARTS, LOOK_SLOTS, LOOK_TABLE, PLAYER_LOOK, buildOntology, describeLook, generateLook, tagsOfLook } from '@openworld-game/content'
+import { Game, LOOK_TAG, RuleLibrary, lookCode, lookProblems, lookTags, restyled, validatePatch, type Look, type Rule } from '@openworld/engine'
+import { BASE_RULES, STORY_RULES, decodeChunk } from '@openworld-game/content'
+import { BASE_HAIRS } from '@openworld/runtime/src/assets/figure/basehair.ts'
+import { BASE_HEADS } from '@openworld/runtime/src/assets/figure/basehead.ts'
+import { BASE_OUTFITS } from '@openworld/runtime/src/assets/figure/baseoutfit.ts'
+import { BASE_FEET } from '@openworld/runtime/src/assets/figure/basefeet.ts'
+import { FH, FW, IDLE_ROW, ROWS, composeSprite } from '@openworld/runtime/src/assets/figure/sprite.ts'
+import { gradient, rgbOf } from '@openworld/runtime/src/assets/figure/color.ts'
+import { bustRect, composePortrait, type LayerPixels, type PortraitManifest } from '@openworld/runtime/src/assets/figure/portrait.ts'
+import { PEOPLE } from '../src/demo/people.ts'
+import { buildFord } from '../src/demo/world.ts'
+
+const lookOf = (p: (typeof PEOPLE)[number]) => generateLook(p.id, { sex: p.gender, age: p.age, role: p.role }, p.look)
+
+describe('the look table', () => {
+  it('is whole: every part fills a known slot, fits known bodies, uses known colours, and has words in both languages', () => {
+    for (const [id, p] of Object.entries(LOOK_PARTS)) {
+      expect(LOOK_SLOTS as readonly string[], id).toContain(p.slot)
+      expect(id.startsWith(p.slot + '.'), id).toBe(true)
+      for (const b of p.bodies ?? []) expect(LOOK_BODIES[b], `${id} body ${b}`).toBeDefined()
+      for (const c of Object.values(p.colors ?? {})) expect(LOOK_COLORS[c], `${id} colour ${c}`).toBeDefined()
+      for (const opts of Object.values(p.gen?.colors ?? {})) for (const c of opts) expect(LOOK_COLORS[c], `${id} gen colour ${c}`).toBeDefined()
+      const say = p.say as { en: string; zh?: string }
+      expect(say.en && say.zh, id).toBeTruthy()
+      for (const t of p.tags ?? []) expect(t.startsWith(LOOK_TAG), `${id} tag ${t}`).toBe(true)
+    }
+    for (const [id, c] of Object.entries(LOOK_COLORS)) expect(/^#[0-9a-f]{6}$/i.test(c.hex), id).toBe(true)
+  })
+
+  it('is the ontology the engine checks looks against', () => {
+    expect(buildOntology().looks).toBe(LOOK_TABLE)
+  })
+
+  it('draws every part on the map: a head part once for every body, a worn piece on each body it fits', () => {
+    for (const [id, p] of Object.entries(LOOK_PARTS)) {
+      if (p.slot === 'hair') expect(BASE_HAIRS[id], `${id} has no map grids`).toBeDefined()
+      else if (['outfit', 'armour', 'cloak'].includes(p.slot))
+        for (const b of p.bodies ?? Object.keys(LOOK_BODIES)) expect(BASE_OUTFITS[id]?.bodies[b as 'man'], `${id} is not drawn on the ${b}`).toBeDefined()
+      else if (['legs', 'shoes'].includes(p.slot)) expect(BASE_FEET[id], `${id} is not laid on the map`).toBeDefined()
+      else expect(BASE_HEADS[id], `${id} has no map grids`).toBeDefined()
+    }
+    // and nothing is drawn that the table does not know
+    for (const t of [BASE_HAIRS, BASE_HEADS, BASE_OUTFITS, BASE_FEET]) for (const id of Object.keys(t)) expect(LOOK_PARTS[id], `${id} drawn but not in the table`).toBeDefined()
+  })
+
+  it('lays the shoes and the stockings on the map in their colour, at the feet', () => {
+    const look: Look = { body: 'woman', parts: { hair: 'hair.long', face: 'face.soft', outfit: 'outfit.adventurer', shoes: 'shoes.tall' }, colors: { 'shoes.1': 'madder' } }
+    const px = composeSprite(look)
+    const bare = composeSprite({ ...look, parts: { ...look.parts, shoes: undefined as never } })
+    let lowest = -1
+    for (let y = 0; y < FH; y++)
+      for (let x = 0; x < FW; x++) {
+        const i = ((IDLE_ROW * FH + y) * FW * 4 + x) * 4
+        if (px[i + 3] && [0, 1, 2].some((k) => px[i + k] !== bare[i + k])) lowest = Math.max(lowest, y)
+      }
+    // the boots changed the frame, and at its feet
+    expect(lowest).toBeGreaterThanOrEqual(32)
+  })
+})
+
+describe('the people', () => {
+  const looks = PEOPLE.map((p) => ({ p, look: lookOf(p) }))
+
+  it('each has a valid look, drawn the same every time', () => {
+    for (const { p, look } of looks) {
+      expect(lookProblems(look, LOOK_TABLE), p.id).toEqual([])
+      expect(lookOf(p), p.id).toEqual(look)
+      expect(look.parts.face, `${p.id} has a face`).toBeDefined()
+      expect(look.parts.outfit, `${p.id} is dressed`).toBeDefined()
+    }
+    expect(lookProblems(PLAYER_LOOK, LOOK_TABLE)).toEqual([])
+  })
+
+  it('a child has a child body, an adult an adult one, as their sex', () => {
+    for (const { p, look } of looks) {
+      const b = LOOK_BODIES[look.body]
+      expect(b.age, p.id).toBe(p.age < 14 ? 'child' : 'adult')
+      expect(b.sex, p.id).toBe(p.gender)
+    }
+  })
+
+  it('no two look alike', () => {
+    const codes = new Map<string, string>()
+    for (const { p, look } of looks) {
+      const c = lookCode(look)
+      expect(codes.get(c), `${p.id} looks like ${codes.get(c)}`).toBeUndefined()
+      codes.set(c, p.id)
+    }
+  })
+
+  it('the old show their age: grey hair or lines', () => {
+    for (const { p, look } of looks) if (p.age >= 60 && p.id !== 'npc.alberic') expect(tagsOfLook(look).some((t) => t === 'look:old' || t === 'look:grey-haired'), p.id).toBe(true)
+  })
+
+  it('are built into the world with their look, and the codex shows each their own', () => {
+    const { index } = buildFord()
+    for (const n of index.npcs.filter((n) => n.id.startsWith('npc.'))) {
+      const p = PEOPLE.find((x) => x.id === n.id)
+      if (!p) continue
+      expect(n.look, n.id).toEqual(lookOf(p))
+    }
+  })
+})
+
+describe('the look says what it draws', () => {
+  it('its tags come from its parts and colours', () => {
+    const look: Look = { body: 'man', parts: { face: 'face.stern', hair: 'hair.thin', beard: 'beard.full', outfit: 'outfit.apron' }, colors: { hair: 'snow' } }
+    const tags = lookTags(look, LOOK_TABLE)
+    expect(tags).toEqual(expect.arrayContaining(['look:balding', 'look:bearded', 'look:grey-haired', 'look:bare-armed', 'look:stern']))
+    expect(lookTags({ ...look, colors: { hair: 'copper' } }, LOOK_TABLE)).toContain('look:red-haired')
+  })
+
+  it('its words name its parts in its colours, in both languages', () => {
+    const look: Look = { body: 'woman', parts: { hair: 'hair.bun', face: 'face.soft', outfit: 'outfit.shawl' }, colors: { hair: 'silver', eyes: 'leaf', 'outfit.1': 'plum' } }
+    const d = describeLook(look, { age: 71 })
+    expect(d.en).toContain('old woman')
+    expect(d.en).toContain('silver hair in a bun')
+    expect(d.en).toContain('green eyes')
+    expect(d.en).toContain('plum dress')
+    expect(d.zh).toContain('银发髻')
+    expect(d.zh).toContain('梅紫色长裙')
+  })
+
+  it('a restyle changes it and marks it the bearer\'s own', () => {
+    const look: Look = { body: 'woman', parts: { hair: 'hair.long', face: 'face.soft', outfit: 'outfit.dress' }, colors: { hair: 'black' } }
+    const r = restyled(look, { parts: { hair: 'hair.bob' }, colors: { hair: 'copper' } })
+    expect(r.parts.hair).toBe('hair.bob')
+    expect(r.colors.hair).toBe('copper')
+    expect(r.own).toBe(true)
+    expect(lookTags(r, LOOK_TABLE)).toContain('look:red-haired')
+    expect(lookProblems({ ...look, parts: { ...look.parts, hair: 'outfit.dress' } }, LOOK_TABLE)[0]).toMatch(/is a outfit, not a hair/)
+    expect(lookProblems({ ...look, parts: { ...look.parts, beard: 'beard.full' } }, LOOK_TABLE)[0]).toMatch(/not drawn for the body woman/)
+  })
+})
+
+describe('the map sprite', () => {
+  it('is a sheet of 4 facings by the walk and the idle pose, 24x36 frames, its feet on the sole row', () => {
+    for (const p of PEOPLE) {
+      const px = composeSprite(lookOf(p))
+      expect(px.length).toBe(FW * 4 * FH * ROWS * 4)
+      for (let col = 0; col < 4; col++) {
+        let bottom = -1
+        for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++) if (px[((IDLE_ROW * FH + y) * FW * 4 + col * FW + x) * 4 + 3]) bottom = Math.max(bottom, y)
+        expect(bottom, `${p.id} facing ${col}`).toBeGreaterThanOrEqual(33)
+        expect(bottom, `${p.id} facing ${col}`).toBeLessThanOrEqual(34)
+      }
+    }
+  })
+
+  it('paints the hair in the hair colour: the same colour the portrait repaints its hair in', () => {
+    const look: Look = { body: 'woman', parts: { hair: 'hair.long', face: 'face.soft', outfit: 'outfit.dress' }, colors: { hair: 'copper' } }
+    const px = composeSprite(look)
+    const mid = rgbOf('copper')
+    let found = false
+    for (let i = 0; i < px.length; i += 4) if (px[i + 3] && [0, 1, 2].every((k) => Math.abs(px[i + k] - mid[k]) <= 1)) found = true
+    expect(found, 'the hair colour itself').toBe(true)
+    // the portrait's gradient puts the colour itself at the base value
+    const g = gradient(mid)
+    expect([g[180 * 3], g[180 * 3 + 1], g[180 * 3 + 2]]).toEqual(mid)
+  })
+})
+
+describe('the portrait', () => {
+  // a 4x8 canvas; every layer one opaque pixel at (1, 6), its paint a colour of its own (zone 0 keeps the paint)
+  const px = (r: number, g: number, b: number): LayerPixels => ({ paint: new Uint8Array([r, g, b, 255]), value: new Uint8Array([180, 0, 0, 255]) })
+  const at = (file: string, z: string) => ({ file, x: 1, y: 6, w: 1, h: 1, z, zones: [] })
+  const layers: Record<string, LayerPixels> = { body: px(250, 220, 200), trousers: px(0, 0, 255), skirt: px(255, 0, 0), boots: px(0, 255, 0) }
+  const m: PortraitManifest = {
+    w: 4,
+    h: 8,
+    bodies: { woman: { layers: [at('body', 'body')], bust: { x: 0, y: 0, w: 4, h: 4 } } },
+    parts: {
+      'outfit.travel': { woman: { layers: [at('trousers', 'outfit')] } },
+      'outfit.dress': { woman: { layers: [at('skirt', 'outfit')], above: ['shoes'] } },
+      'shoes.tall': { woman: { layers: [at('boots', 'shoes')] } },
+    },
+  }
+  const top = (look: Look) => [...composePortrait(m, look, undefined, (f) => layers[f]).subarray((6 * 4 + 1) * 4, (6 * 4 + 1) * 4 + 3)]
+
+  it('is the whole figure, the boots over the trousers and a long skirt over the boots', () => {
+    expect(composePortrait(m, { body: 'woman', parts: {}, colors: {} }, undefined, (f) => layers[f]).length).toBe(4 * 8 * 4)
+    expect(top({ body: 'woman', parts: { outfit: 'outfit.travel', shoes: 'shoes.tall' }, colors: {} })).toEqual([0, 255, 0])
+    expect(top({ body: 'woman', parts: { outfit: 'outfit.dress', shoes: 'shoes.tall' }, colors: {} })).toEqual([255, 0, 0])
+  })
+
+  it('has a bust per body: the square the dialogue box shows', () => {
+    expect(bustRect(m, { body: 'woman', parts: {}, colors: {} })).toEqual({ x: 0, y: 0, w: 4, h: 4 })
+  })
+
+  it('draws a part only on the body it was drawn for (a man has his own face, never hers)', () => {
+    expect(top({ body: 'man', parts: { outfit: 'outfit.travel' }, colors: {} })).toEqual([0, 0, 0])
+  })
+
+  it('the fringe over the eyes: where the front hair is opaque, no eye, brow or lash of the face shows', () => {
+    // a 10x10 canvas: a face whose eyes (zone 2) fill it; the front hair (blue paint, zone 0) over its left half
+    const face: LayerPixels = { paint: new Uint8Array(400), value: new Uint8Array(400) }
+    for (let i = 0; i < 100; i++) face.value.set([180, 80, 0, 255], i * 4)
+    const hair: LayerPixels = { paint: new Uint8Array(400), value: new Uint8Array(400) }
+    for (let y = 0; y < 10; y++) for (let x = 0; x < 5; x++) (hair.paint.set([0, 0, 255, 255], (y * 10 + x) * 4), hair.value.set([180, 0, 0, 255], (y * 10 + x) * 4))
+    const at = (file: string, z: string, zones: string[]) => ({ file, x: 0, y: 0, w: 10, h: 10, z, zones })
+    const m: PortraitManifest = {
+      w: 10,
+      h: 10,
+      bodies: { woman: { layers: [], bust: { x: 0, y: 0, w: 10, h: 10 } } },
+      parts: { 'face.soft': { woman: { layers: [at('face', 'face', ['skin', 'eyes'])] } }, 'hair.long': { woman: { layers: [at('hair', 'hair', [])] } } },
+    }
+    const px: Record<string, LayerPixels> = { face, hair }
+    const fig = composePortrait(m, { body: 'woman', parts: { face: 'face.soft', hair: 'hair.long' }, colors: { eyes: 'ember' } }, undefined, (f) => px[f])
+    expect([...fig.subarray((5 * 10 + 2) * 4, (5 * 10 + 2) * 4 + 3)], 'the strand over the eye').toEqual([0, 0, 255])
+    expect(fig[(5 * 10 + 7) * 4 + 2], 'the eye where no strand is').not.toBe(255)
+  })
+
+  it('a covering hat: the hair is under it above its brim, beside it too, and comes out from under it below', () => {
+    // a 40x20 canvas: hair (blue) everywhere; a cap (red) at columns 15..24, rows 0..5 (its brim at row 5)
+    const fill = (w: number, h: number, rgb: number[]): LayerPixels => {
+      const paint = new Uint8Array(w * h * 4)
+      const value = new Uint8Array(w * h * 4)
+      for (let i = 0; i < w * h; i++) (paint.set([...rgb, 255], i * 4), value.set([180, 0, 0, 255], i * 4))
+      return { paint, value }
+    }
+    const px: Record<string, LayerPixels> = { hair: fill(40, 20, [0, 0, 255]), cap: fill(10, 6, [255, 0, 0]) }
+    const at = (file: string, x: number, y: number, w: number, h: number, z: string) => ({ file, x, y, w, h, z, zones: [] })
+    const m: PortraitManifest = {
+      w: 40,
+      h: 20,
+      bodies: { man: { layers: [], bust: { x: 0, y: 0, w: 20, h: 20 } } },
+      parts: { 'hair.messy': { man: { layers: [at('hair', 0, 0, 40, 20, 'hair')] } }, 'hat.cap': { man: { layers: [at('cap', 15, 0, 10, 6, 'hat')], covers: true } } },
+    }
+    const fig = composePortrait(m, { body: 'man', parts: { hair: 'hair.messy', hat: 'hat.cap' }, colors: {} }, undefined, (f) => px[f])
+    const a = (x: number, y: number) => fig[(y * 40 + x) * 4 + 3]
+    expect(a(20, 2), 'the cap').toBe(255)
+    expect(fig[(2 * 40 + 20) * 4], 'the cap is red').toBe(255)
+    expect(a(13, 3), 'hair beside the cap, above its brim: under it').toBe(0)
+    expect(a(13, 12), 'hair beside the cap, well below its brim: shown').toBe(255)
+    expect(a(2, 12), 'hair far out, above the line sloping down from the brim: under the cap').toBe(0)
+    expect(a(10, 19), 'beside the cap and low, below that line: shown').toBe(255)
+  })
+
+  it('an enclosing boot: below its rim only the boot and what falls over it show; the leg shows in its opening', () => {
+    // a 40x20 canvas: trousers (blue) the full width from row 4 down; a boot (green) at columns 10..19 from row 10, its
+    // middle open from row 10 to 12 (columns 12..17); a coat's hem (red) over the shoes at columns 30..34
+    const W = 40
+    const H = 20
+    const rect = (x0: number, y0: number, x1: number, y1: number, rgb: number[], hole?: (x: number, y: number) => boolean): LayerPixels => {
+      const w = x1 - x0
+      const h = y1 - y0
+      const paint = new Uint8Array(w * h * 4)
+      const value = new Uint8Array(w * h * 4)
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < w; x++) {
+          if (hole?.(x0 + x, y0 + y)) continue
+          paint.set([...rgb, 255], (y * w + x) * 4)
+          value.set([180, 0, 0, 255], (y * w + x) * 4)
+        }
+      return { paint, value }
+    }
+    const px: Record<string, LayerPixels> = {
+      trousers: rect(0, 4, 40, 20, [0, 0, 255]),
+      boot: rect(10, 10, 20, 20, [0, 255, 0], (x, y) => x >= 12 && x <= 17 && y <= 12),
+      hem: rect(30, 8, 35, 20, [255, 0, 0]),
+    }
+    const at = (file: string, x: number, y: number, w: number, h: number, z: string, above?: string[]) => ({ file, x, y, w, h, z, zones: [], above })
+    const m: PortraitManifest = {
+      w: W,
+      h: H,
+      bodies: { woman: { layers: [], bust: { x: 0, y: 0, w: 20, h: 20 } } },
+      parts: {
+        'outfit.coat': { woman: { layers: [at('trousers', 0, 4, 40, 16, 'outfit'), at('hem', 30, 8, 5, 12, 'outfit', ['shoes'])] } },
+        'shoes.tall': { woman: { layers: [at('boot', 10, 10, 10, 10, 'shoes')], encloses: true } },
+      },
+    }
+    const fig = composePortrait(m, { body: 'woman', parts: { outfit: 'outfit.coat', shoes: 'shoes.tall' }, colors: {} }, undefined, (f) => px[f])
+    const rgb = (x: number, y: number) => (fig[(y * W + x) * 4 + 3] ? [...fig.subarray((y * W + x) * 4, (y * W + x) * 4 + 3)] : null)
+    expect(rgb(15, 5), 'the trousers above the rim').toEqual([0, 0, 255])
+    expect(rgb(15, 11), 'the leg in the opening').toEqual([0, 0, 255])
+    expect(rgb(10, 15), 'the boot').toEqual([0, 255, 0])
+    expect(rgb(5, 15), 'beside the shaft: in the boot, not shown').toBe(null)
+    expect(rgb(21, 15), 'beside the shaft').toBe(null)
+    expect(rgb(1, 15), 'far beside the boot, past its margin: shown').toEqual([0, 0, 255])
+    expect(rgb(32, 15), 'the hem falls over the shoes').toEqual([255, 0, 0])
+  })
+})
+
+describe('restyle: a look changes as an outcome of its bearer (the event model)', () => {
+  const rule = (effect: Record<string, unknown>): Rule => ({ id: 'test.dye', host: { type: 'actor/person/herbalist' }, on: 'impulse/notify', tree: { do: [effect as never] } })
+
+  it('a rule on the bearer restyles it: its look, its tags and the mark that the look is its own follow', () => {
+    const { index, chunks } = buildFord()
+    const lib = new RuleLibrary([...BASE_RULES, ...STORY_RULES, rule({ op: 'restyle', parts: { hair: 'hair.bob' }, colors: { hair: 'snow' } })])
+    const game = Game.create(index, buildOntology(), lib)
+    for (const c of chunks) game.loadChunk(decodeChunk(c))
+    const w = game.engine.world
+    const wren = w.get('npc.wren')!
+    expect(w.hasTag(wren, 'look:grey-haired')).toBe(false)
+    game.engine.dispatch({ kind: 'impulse/notify', host: { e: wren.id }, roles: {}, params: { what: 'dye' }, origin: 'world' })
+    const look = wren.look as Look
+    expect(look.parts.hair).toBe('hair.bob')
+    expect(look.colors.hair).toBe('snow')
+    expect(look.own).toBe(true)
+    expect(w.hasTag(wren, 'look:grey-haired')).toBe(true)
+    expect([...w.view({ e: wren.id })!.tags]).toContain('look:grey-haired')
+  })
+
+  it('the validator takes only the parts and colours of the table', () => {
+    const onto = buildOntology()
+    const lib = new RuleLibrary([...BASE_RULES, ...STORY_RULES])
+    const check = (effect: Record<string, unknown>) => validatePatch({ artifacts: [{ kind: 'rule', rule: rule(effect) }] }, { ontology: onto, library: lib }).errors.join(' | ')
+    expect(check({ op: 'restyle', parts: { hair: 'hair.bob' }, colors: { hair: 'copper' } })).not.toMatch(/look part|colour/)
+    expect(check({ op: 'restyle', parts: { hair: 'hair.mohawk' } })).toMatch(/unknown look part "hair.mohawk"/)
+    expect(check({ op: 'restyle', parts: { hat: 'hair.bob' } })).toMatch(/hair.bob is a hair, not a hat/)
+    expect(check({ op: 'restyle', colors: { hair: 'chartreuse' } })).toMatch(/unknown colour "chartreuse"/)
+  })
+})
+
+describe('what is worn shows on the look as seen (an item\'s look)', () => {
+  it('an iron breastplate and a helmet put on: the snapshot\'s look, its tags, its words and its sprite follow; the own look is kept', async () => {
+    const { snapshot } = await import('@openworld/engine')
+    const { index, chunks } = buildFord()
+    const game = Game.create(index, buildOntology(), new RuleLibrary([...BASE_RULES, ...STORY_RULES]))
+    for (const c of chunks) game.loadChunk(decodeChunk(c))
+    const eng = game.engine
+    const w = eng.world
+    const p = w.player
+    const own = structuredClone(p.look) as Look
+    const before = composeSprite(own)
+    eng.author(() => {
+      w.create('item/armor/breastplate', { on: 'inside', holder: p.id }, { id: 'lk.plate', tags: ['material:iron'] })
+      w.create('item/armor/helmet', { on: 'inside', holder: p.id }, { id: 'lk.helm', tags: ['material:bronze'] })
+    })
+    for (const id of ['lk.plate', 'lk.helm']) (eng.controls.sync(), eng.controls.wear(id), eng.tick())
+    expect(w.prop(p, 'wear:body')).toBe('lk.plate')
+    const seen = snapshot(eng).entities.find((e) => e.id === p.id)!.look as Look
+    expect(seen.parts.armour).toBe('armour.plate')
+    expect(seen.parts.hat).toBe('hat.helm')
+    expect(seen.colors['armour.1']).toBe(LOOK_TABLE.materials!.iron)
+    expect(seen.colors['hat.1']).toBe(LOOK_TABLE.materials!.bronze)
+    expect(p.look).toEqual(own)
+    expect(w.hasTag(p, 'look:armoured')).toBe(true)
+    expect(w.hasTag(p, 'look:helmeted')).toBe(true)
+    expect(Buffer.from(composeSprite(seen)).equals(Buffer.from(before))).toBe(false)
+    // taken off again: the look as seen is the own one
+    for (const id of ['lk.plate', 'lk.helm']) (eng.controls.sync(), eng.controls.wear(id), eng.tick())
+    expect(snapshot(eng).entities.find((e) => e.id === p.id)!.look).toEqual(own)
+    expect(w.hasTag(p, 'look:armoured')).toBe(false)
+  })
+
+  it('every item worn as a look part names a part the table has, in a slot only worn things fill or a hat', () => {
+    const onto = buildOntology()
+    const worn = Object.values(onto.types).filter((t) => typeof t.props?.look === 'string')
+    expect(worn.length).toBeGreaterThanOrEqual(7)
+    for (const t of worn) expect(LOOK_PARTS[t.props?.look as string], t.id).toBeDefined()
+  })
+})

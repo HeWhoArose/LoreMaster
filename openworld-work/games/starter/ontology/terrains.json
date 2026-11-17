@@ -1,0 +1,42 @@
+{
+  "terrains": [
+    { "id": "grass", "name": "grass", "tags": ["ground", "plant"], "color": "#6ab04c" },
+    { "id": "flowers", "name": "flowers", "tags": ["ground", "plant"], "color": "#7cc05a" },
+    { "id": "path", "name": "dirt road", "tags": ["ground", "road"], "color": "#c9a86a" },
+    {
+      "id": "water",
+      "name": "water",
+      "tags": ["water", "liquid", "solid"],
+      "solid": true,
+      "liquid": true,
+      "color": "#3d7fd6"
+    },
+    {
+      "id": "tree",
+      "name": "tree",
+      "tags": ["plant", "tree", "flammable", "wooden", "solid"],
+      "solid": true,
+      "space": "volume",
+      "props": { "material": "wood", "maxHp": 6, "hp": 6 },
+      "color": "#2f6b33"
+    },
+    {
+      "id": "stump",
+      "name": "stump",
+      "tags": ["wooden", "flammable"],
+      "space": "soil",
+      "stage": { "into": "tile/tree", "lasts": 9600, "fx": "leaves" },
+      "color": "#7a5a3a"
+    },
+    {
+      "id": "wall",
+      "name": "wall",
+      "tags": ["wall", "solid"],
+      "solid": true,
+      "space": "volume",
+      "color": "#6b6e75"
+    },
+    { "id": "floor", "name": "wooden floor", "tags": ["floor", "wooden", "indoor"], "color": "#9c7a4c" },
+    { "id": "door", "name": "door", "tags": ["door", "wooden"], "color": "#6b4226" }
+  ]
+}

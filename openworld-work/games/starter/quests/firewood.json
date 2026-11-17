@@ -1,0 +1,32 @@
+{
+  "id": "firewood",
+  "kind": "side",
+  "title": "Firewood",
+  "summary": "Mira needs three logs for her stove. Her axe is in the chest by the path.",
+  "aliases": { "giver": { "id": "npc.mira", "essential": true } },
+  "objectives": [
+    { "id": "logs", "text": "Logs", "count": { "carry": { "type": "item/material/log" } }, "need": 3 },
+    { "id": "back", "text": "Back to {giver}", "target": "giver", "talk": true }
+  ],
+  "stages": [
+    {
+      "n": 10,
+      "log": "Mira needs three logs. Her axe is in the chest by the path.",
+      "show": ["logs"],
+      "say": "Could you bring me three logs? My axe is in the chest by the path."
+    },
+    { "n": 20, "on": { "objectives": ["logs"] }, "show": ["back"], "log": "Three logs. Back to {giver}." },
+    {
+      "n": 100,
+      "on": { "all": [{ "talk": "giver" }, { "objectives": ["logs"] }] },
+      "done": ["back"],
+      "say": "That will keep the stove going for days. Thank you.",
+      "take": [{ "match": { "type": "item/material/log" }, "count": 3 }],
+      "reward": { "xp": 20, "items": [{ "type": "item/material/stone", "count": 1 }] },
+      "complete": true,
+      "log": "Handed in to {giver}."
+    }
+  ],
+  "start": { "auto": { "talk": "giver" } },
+  "waiting": "Three logs, if you would. My axe is in the chest by the path."
+}

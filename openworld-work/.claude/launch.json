@@ -1,0 +1,153 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "client",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "client-only",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:client"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "dev-claude",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--backend",
+        "claude-code"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "editor",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "editor"
+      ],
+      "port": 5175
+    },
+    {
+      "name": "player",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "play"
+      ],
+      "port": 5174
+    },
+    {
+      "name": "client-dist",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "preview",
+        "games/openworld/client",
+        "--port",
+        "4173",
+        "--strictPort"
+      ],
+      "port": 4173
+    },
+    {
+      "name": "modder",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "exec",
+        "--",
+        "tsx",
+        "watch",
+        "packages/ai/scripts/modder.ts",
+        "--game",
+        "games/openworld/content/src/game.ts",
+        "serve"
+      ],
+      "port": 8787
+    },
+    {
+      "name": "modder-offline",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "modder",
+        "--",
+        "serve",
+        "8787",
+        "--script",
+        "packages/ai/fixtures/offline.json",
+        "--data",
+        "var/offline"
+      ],
+      "port": 8787
+    },
+    {
+      "name": "wiki",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "wiki"
+      ],
+      "port": 5180
+    },
+    {
+      "name": "study",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "tsx",
+        "games/openworld/ai/src/eval/study.ts",
+        "serve",
+        "var/eval/study/results",
+        "--port",
+        "5191"
+      ],
+      "port": 5191
+    },
+    {
+      "name": "site-designs",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8766",
+        "--directory",
+        "site/designs"
+      ],
+      "port": 8766
+    },
+    {
+      "name": "client-5177",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "games/openworld/client",
+        "--port",
+        "5177",
+        "--strictPort"
+      ],
+      "port": 5177
+    },
+    {
+      "name": "site",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "site/tools/serve.mjs",
+        "site",
+        "8767"
+      ],
+      "port": 8767
+    }
+  ]
+}

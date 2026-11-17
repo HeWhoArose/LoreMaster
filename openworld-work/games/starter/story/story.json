@@ -1,0 +1,13 @@
+{
+  "steps": [
+    {
+      "id": "arrive",
+      "when": { "map": "glade" },
+      "script": [
+        { "say": "player", "text": "A glade, and a cottage. Someone lives here." },
+        { "fact": "glade.arrived", "value": 1 }
+      ]
+    }
+  ],
+  "protectedFacts": ["glade."]
+}

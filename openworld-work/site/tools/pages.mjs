@@ -1,0 +1,80 @@
+// The project page, the game and the wiki as one GitHub Pages site: the gh-pages branch of this repository, served at
+// openworldrpg.ai (sihanxu.github.io/openworld and sihanxu.me/openworld are sent there by GitHub).
+//   node site/tools/pages.mjs <game dist> [outDir] [--wiki <wiki build>] [--push]   (default var/pages)
+// The game is built without a modder (npm run build, no VITE_MODDER_URL): on Pages it asks the player's own model
+// only (docs/byok.md). The page goes at the root, the game under play/, with CNAME and .nojekyll. --push commits the
+// folder onto the branch's last commit and pushes it: only what changed goes up (the folder keeps its .git between
+// runs; a first run fetches the branch's last commit once). --fresh instead makes the folder the branch's only
+// commit, force-pushed, which uploads the whole site but drops the history the branch has piled up.
+// --wiki: the wiki (games/openworld/wiki/src/build.ts --out <dir>) under wiki/. Its pages ask for the game's pictures at
+// /assets/ (where the game was once served, at a host's root): the ones they name are copied there from the game's build.
+// --cloudflare: the same folder also to openworld.lmms-lab.com, the static Worker of site/wrangler.jsonc (a copy of its
+// own: saves and the player's key are kept per host), with CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN from the
+// environment. An assembled folder alone: npx wrangler@4.149.0 deploy --config site/wrangler.jsonc; its versions:
+// `deployments status`, and `rollback` to the one before, with the same --config.
+import { execFileSync } from 'node:child_process'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, extname, join, resolve } from 'node:path'
+
+const argv = process.argv.slice(2)
+const at = argv.indexOf('--wiki')
+const WIKI = at >= 0 ? argv[at + 1] : undefined
+const args = argv.filter((a, i) => !a.startsWith('--') && !(at >= 0 && i === at + 1))
+const [GAME, OUT = 'var/pages'] = args
+const DOMAIN = 'openworldrpg.ai'
+if (!GAME || !existsSync(join(GAME, 'index.html'))) throw new Error('usage: node site/tools/pages.mjs <game dist> [outDir] [--wiki <wiki build>] [--push] [--cloudflare]')
+
+execFileSync(process.execPath, ['site/tools/publish.mjs', OUT], { stdio: 'inherit' })
+rmSync(join(OUT, 'play'), { recursive: true, force: true })
+cpSync(GAME, join(OUT, 'play'), { recursive: true })
+writeFileSync(join(OUT, 'CNAME'), `${DOMAIN}\n`)
+// what the Worker leaves out: the branch's checkout and the files only Pages reads
+writeFileSync(join(OUT, '.assetsignore'), '.git\n.assetsignore\nCNAME\n.nojekyll\n')
+console.log(`${OUT}: the page, the game under play/, CNAME ${DOMAIN}`)
+
+if (WIKI) {
+  if (!existsSync(join(WIKI, 'index.html'))) throw new Error(`--wiki ${WIKI}: no wiki build there`)
+  for (const d of ['wiki', 'assets']) rmSync(join(OUT, d), { recursive: true, force: true })
+  cpSync(WIKI, join(OUT, 'wiki'), { recursive: true })
+  // the pictures its pages, stylesheets and scripts name (a file's name may hold spaces), from the game's own
+  const named = new Set()
+  const walk = (d) => {
+    for (const f of readdirSync(d)) {
+      const p = join(d, f)
+      if (statSync(p).isDirectory()) walk(p)
+      else if (['.html', '.css', '.js'].includes(extname(f))) for (const m of readFileSync(p, 'utf8').matchAll(/\/assets\/([^"'()?#<>\n]+\.\w+)/g)) named.add(decodeURIComponent(m[1]))
+    }
+  }
+  walk(WIKI)
+  const missing = []
+  for (const a of named) {
+    const from = join(GAME, 'assets', a)
+    if (!existsSync(from) || !statSync(from).isFile()) { missing.push(a); continue }
+    mkdirSync(dirname(join(OUT, 'assets', a)), { recursive: true })
+    cpSync(from, join(OUT, 'assets', a))
+  }
+  console.log(`wiki/: the wiki, ${named.size - missing.length} of the game's pictures under assets/${missing.length ? `; not in the game: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ` and ${missing.length - 5} more` : ''}` : ''}`)
+}
+
+if (process.argv.includes('--push') || process.argv.includes('--fresh')) {
+  const remote = execFileSync('git', ['remote', 'get-url', 'origin'], { encoding: 'utf8' }).trim()
+  const git = (...a) => execFileSync('git', a, { cwd: resolve(OUT), stdio: 'inherit' })
+  const fresh = process.argv.includes('--fresh')
+  const message = `Pages: the project page, the game and the wiki (${execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim()})`
+  if (fresh) rmSync(join(OUT, '.git'), { recursive: true, force: true })
+  if (!existsSync(join(OUT, '.git'))) git('init', '-q', '-b', 'gh-pages')
+  if (!fresh) {
+    // the branch as it is on GitHub: the new commit goes on top of it, so the push carries only the difference
+    git('fetch', '-q', '--depth', '1', remote, 'gh-pages')
+    git('reset', '-q', '--soft', 'FETCH_HEAD')
+  }
+  git('add', '-A')
+  git('commit', '-q', '--allow-empty', '-m', message)
+  git('push', ...(fresh ? ['-f'] : []), remote, 'HEAD:gh-pages')
+}
+
+if (process.argv.includes('--cloudflare')) {
+  if (!process.env.CLOUDFLARE_ACCOUNT_ID || !process.env.CLOUDFLARE_API_TOKEN) throw new Error('--cloudflare: CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN in the environment')
+  const assets = resolve(OUT) === resolve('var/pages') ? [] : ['--assets', resolve(OUT)]
+  execFileSync('npx', ['--yes', 'wrangler@4.149.0', 'deploy', '--config', 'site/wrangler.jsonc', ...assets], { stdio: 'inherit', shell: process.platform === 'win32' })
+}

@@ -1,0 +1,7 @@
+{
+  "factions": {
+    "folk": { "name": "folk", "hostile": [] },
+    "wild": { "name": "the wild", "hostile": ["folk"] }
+  },
+  "roomRoles": [{ "role": "bedroom", "needs": { "type": "fixture/furniture/bed" }, "props": { "rest": 1 } }]
+}

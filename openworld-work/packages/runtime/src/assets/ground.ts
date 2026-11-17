@@ -1,0 +1,447 @@
+// Ground rendering from the asset pack: plain tiles + 47-tile blob autotiles, composited
+// into one runtime tileset canvas so Phaser can draw each map as a single tilemap layer.
+//
+// Blob blocks are decoded from their pixels, not from a hand-written table: for every tile
+// in a block we sample 8 border points and classify each as "fill" (the terrain) or
+// "outside" (the ground around it). A map cell then asks for the tile whose signature
+// matches its neighbourhood.
+
+import type { Catalog, SpriteDef } from './types.ts'
+
+// ---------------------------------------------------------------------------------------------
+// Blob autotile layout (verified)
+// ---------------------------------------------------------------------------------------------
+/**
+ * The 47-tile blob layout of TilesetFloor.png cols 0-10 rows 7-11, as offsets from the block's
+ * top-left. Key = canonical 8-neighbour mask of "same terrain" neighbours:
+ *   N=1 NE=2 E=4 SE=8 S=16 SW=32 W=64 NW=128 (a corner bit only counts when both adjacent
+ *   edges are set). Derived by classifying every tile of the reference block pixel-by-pixel
+ *   (47 distinct masks, one tile each). NOTE the layout is the 10x4 block + 5 tiles in the 5th
+ *   row (cols 4-8) + TWO extra tiles in column 10, rows 2-3 (masks 117 and 213) — so a block
+ *   is 11 tiles wide. (0,4)-(3,4) of a block are plain-ground variants, not part of the blob.
+ */
+export const BLOB47: Record<number, [number, number]> = {
+  0: [3, 3], 1: [3, 2], 4: [0, 3], 5: [4, 3], 7: [0, 2], 16: [3, 0], 17: [3, 1], 20: [4, 0], 21: [4, 4],
+  23: [4, 1], 28: [0, 0], 29: [4, 2], 31: [0, 1], 64: [2, 3], 65: [7, 3], 68: [1, 3], 69: [8, 3], 71: [6, 3],
+  80: [7, 0], 81: [7, 4], 84: [8, 0], 85: [8, 4], 87: [9, 3], 92: [6, 0], 93: [9, 2], 95: [6, 4], 112: [2, 0],
+  113: [7, 2], 116: [5, 0], 117: [10, 2], 119: [9, 1], 124: [1, 0], 125: [8, 2], 127: [6, 2], 193: [2, 2],
+  197: [5, 3], 199: [1, 2], 209: [7, 1], 213: [10, 3], 215: [8, 1], 221: [9, 0], 223: [6, 1], 241: [2, 1],
+  245: [5, 4], 247: [5, 1], 253: [5, 2], 255: [1, 1],
+}
+
+export const T = 16
+
+/** Sample points (in-tile px) for the 8 neighbour directions, inset from the edges. */
+const SAMPLE: [number, number][] = [[8, 3], [12, 3], [12, 8], [12, 12], [8, 12], [3, 12], [3, 8], [3, 3]]
+
+type Img = HTMLImageElement | HTMLCanvasElement
+
+function pixels(img: Img): { data: Uint8ClampedArray; w: number } {
+  const c = document.createElement('canvas')
+  c.width = img.width
+  c.height = img.height
+  const g = c.getContext('2d', { willReadFrequently: true })!
+  g.drawImage(img, 0, 0)
+  return { data: g.getImageData(0, 0, c.width, c.height).data, w: c.width }
+}
+
+function avg(px: { data: Uint8ClampedArray; w: number }, x: number, y: number): [number, number, number, number] {
+  let r = 0
+  let g = 0
+  let b = 0
+  let a = 0
+  let n = 0
+  for (let dy = -1; dy <= 1; dy++)
+    for (let dx = -1; dx <= 1; dx++) {
+      const i = ((y + dy) * px.w + (x + dx)) * 4
+      r += px.data[i]
+      g += px.data[i + 1]
+      b += px.data[i + 2]
+      a += px.data[i + 3]
+      n++
+    }
+  return [r / n, g / n, b / n, a / n]
+}
+
+const dist = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2], (a[3] - b[3]) * 0.5)
+
+export interface BlobTable {
+  /** 8-bit signature -> candidate tiles [col,row] in the source image. */
+  bySig: Map<number, [number, number][]>
+  all: { sig: number; col: number; row: number }[]
+}
+
+/** Decode a blob block (10x4 + 5 on the 5th row) by pixel sampling. */
+export function decodeBlob(img: Img, col: number, row: number, w = 10, h = 5): BlobTable {
+  const px = pixels(img)
+  const tile = (c: number, r: number, x: number, y: number) => avg(px, (col + c) * T + x, (row + r) * T + y)
+  const fillRef = tile(1, 1, 8, 8) // centre of the 3x3 patch: all fill
+  const outRef = tile(0, 0, 3, 3) // top-left corner of the patch: outside
+  const all: BlobTable['all'] = []
+  const bySig = new Map<number, [number, number][]>()
+  for (let r = 0; r < h; r++)
+    for (let c = 0; c < w; c++) {
+      const centre = tile(c, r, 8, 8)
+      if (centre[3] < 128) continue // empty slot
+      let sig = 0
+      SAMPLE.forEach(([x, y], i) => {
+        const p = tile(c, r, x, y)
+        if (dist(p, fillRef) <= dist(p, outRef)) sig |= 1 << i
+      })
+      all.push({ sig, col: col + c, row: row + r })
+      const list = bySig.get(sig) ?? []
+      list.push([col + c, row + r])
+      bySig.set(sig, list)
+    }
+  return { bySig, all }
+}
+
+/** Signature a cell wants, from which of its 8 neighbours are the same terrain. */
+export function wantSig(same: (dx: number, dy: number) => boolean): number {
+  const n = same(0, -1)
+  const e = same(1, 0)
+  const s = same(0, 1)
+  const w = same(-1, 0)
+  let sig = 0
+  if (n) sig |= 1
+  if (n && e && same(1, -1)) sig |= 2
+  if (e) sig |= 4
+  if (s && e && same(1, 1)) sig |= 8
+  if (s) sig |= 16
+  if (s && w && same(-1, 1)) sig |= 32
+  if (w) sig |= 64
+  if (n && w && same(-1, -1)) sig |= 128
+  return sig
+}
+
+function popcount(x: number) {
+  let n = 0
+  while (x) (n += x & 1), (x >>= 1)
+  return n
+}
+
+export function pickBlob(t: BlobTable, sig: number, hash: number): [number, number] {
+  const exact = t.bySig.get(sig)
+  if (exact?.length) return exact[hash % exact.length]
+  // nearest signature (edges weigh more than corners)
+  let best = t.all[0]
+  let bestD = Infinity
+  for (const e of t.all) {
+    const d = popcount((e.sig ^ sig) & 0b01010101) * 3 + popcount((e.sig ^ sig) & 0b10101010)
+    if (d < bestD) (bestD = d), (best = e)
+  }
+  return [best.col, best.row]
+}
+
+export function hash2(x: number, y: number, salt = 0): number {
+  let h = (x * 73856093) ^ (y * 19349663) ^ (salt * 83492791)
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  return (h ^ (h >>> 16)) >>> 0
+}
+
+/**
+ * The runtime ground atlas: every tile a map may need (plain variants + all blob tiles +
+ * tinted variants) copied into one canvas grid. Returns frame indices for lookups.
+ */
+export class GroundAtlas {
+  canvas: HTMLCanvasElement
+  private g: CanvasRenderingContext2D
+  private next = 0
+  private cols = 32
+  private index = new Map<string, number>()
+  blobs: Record<string, BlobTable> = {}
+
+  constructor(
+    catalog: Catalog,
+    private images: Record<string, Img>,
+  ) {
+    this.canvas = document.createElement('canvas')
+    this.canvas.width = this.cols * T
+    // (the overworld's laid grounds take a tile for each ground they meet: room for them)
+    this.canvas.height = 128 * T
+    this.g = this.canvas.getContext('2d')!
+    this.g.imageSmoothingEnabled = false
+    void catalog
+  }
+
+  /** Index of a source tile (copied on first use), optionally tinted. */
+  tile(img: string, col: number, row: number, tint?: string, under?: [string, number, number]): number {
+    const key = `${img}|${col}|${row}|${tint ?? ''}|${under?.join(',') ?? ''}`
+    const hit = this.index.get(key)
+    if (hit !== undefined) return hit
+    const i = this.next++
+    const src = this.images[img]
+    const x = (i % this.cols) * T
+    const y = Math.floor(i / this.cols) * T
+    // the tile, tinted (only its own pixels), then what lies under it drawn behind
+    if (src) this.g.drawImage(src, col * T, row * T, T, T, x, y, T, T)
+    if (tint) {
+      this.g.save()
+      this.g.globalCompositeOperation = 'source-atop'
+      this.g.fillStyle = tint
+      this.g.fillRect(x, y, T, T)
+      this.g.restore()
+    }
+    if (under && this.images[under[0]]) {
+      this.g.save()
+      this.g.globalCompositeOperation = 'destination-over'
+      this.g.drawImage(this.images[under[0]], under[1] * T, under[2] * T, T, T, x, y, T, T)
+      this.g.restore()
+    }
+    this.index.set(key, i)
+    return i
+  }
+}
+
+/**
+ * Terrains drawn with another terrain's tiles (ice = the snow's sheet over water) — the overworld's grounds as the
+ * local ones they stand for, unless the catalogue draws them itself (a world map of its own: `ow_*` with tiles of their own).
+ */
+// ice is drawn as the snow's sheet, its soft edges over open water (UNDER), icy blue: it joins the rime on the bank,
+// and open water draws no shore against it (groundTile)
+const ALIAS: Record<string, string> = { ice: 'snow', salt: 'snow', spring: 'grass', dirt: 'path', ow_sea: 'deepwater', ow_river: 'water', ow_road: 'path', ow_plain: 'grass', ow_forest: 'grass', ow_hills: 'drygrass', ow_mountain: 'grass', ow_snow: 'snow' }
+/** Tints composited over a terrain's tiles. */
+// (dry grass is not tinted: a tinted ground tile is a hard square, and its tall clumps are tinted gold already — scene.ts)
+const TINT: Record<string, string> = {
+  ash: 'rgba(45,40,38,0.62)',
+  charred_tree: 'rgba(40,34,30,0.45)',
+  burnt_wall: 'rgba(30,24,20,0.6)',
+  ice: 'rgba(150,205,240,0.45)',
+  // salt crust: the snow's sheet, a little warmer and greyer
+  salt: 'rgba(214,204,182,0.3)',
+}
+/** Tiles with transparent parts are drawn over a full tile of this terrain. */
+const UNDER: Record<string, string> = {
+  bridge: 'water',
+  ice: 'water',
+  salt: 'sand',
+  door: 'floor_wood',
+  stairs_down: 'cave_floor',
+  stairs_up: 'cave_floor',
+  snow: 'grass',
+}
+
+/** Autotile identity: terrains drawn from the same blob block join seamlessly (water + deep water). */
+/** The terrain whose tiles draw `terrain`: its own when the catalogue has them, else its alias's. */
+const drawnAs = (catalog: Catalog, terrain: string): string => (terrain.startsWith('ow_') && (catalog.blobs[terrain] || catalog.plain[terrain]) ? terrain : (ALIAS[terrain] ?? terrain))
+
+export function groupOf(catalog: Catalog, terrain: string): string {
+  const key = drawnAs(catalog, terrain)
+  const b = catalog.blobs[key]
+  return b ? `${b.img}|${b.col}|${b.row}` : terrain
+}
+
+function fullTile(atlasTiles: (img: string, c: number, r: number) => void, catalog: Catalog, terrain: string): [string, number, number] | undefined {
+  void atlasTiles
+  const b = catalog.blobs[terrain]
+  if (b) {
+    const [dc, dr] = BLOB47[255]
+    return [b.img, b.col + dc, b.row + dr]
+  }
+  const p = catalog.plain[terrain]?.[0]
+  return p ? [p[0], p[1], p[2]] : undefined
+}
+
+/** What the snow lies up against without a drift's rim: a hut's walls, a cliff, a floor with its own edge. */
+const SNOW_BANKS = new Set(['wall', 'woodwall', 'burnt_wall', 'canvaswall', 'thatchwall', 'snowwall', 'cave_wall', 'floor_wood', 'floor_stone', 'cobble', 'carpet'])
+
+/** Open ground that is not snow: what a snowfield gives way to (a floor, a road and what stands are neither). */
+const BARE = new Set(['grass', 'drygrass', 'flowers', 'dirt', 'sand', 'mud', 'gravel', 'ash', 'farmland'])
+
+/**
+ * Of the nearest ring round (x, y) that holds snow or bare ground (out to `reach`, the cells `skip` says passed over),
+ * is most of it snow?
+ */
+function snowRing(terrainAt: (x: number, y: number) => string, x: number, y: number, reach: number, skip: (n: string, x: number, y: number) => boolean): boolean {
+  for (let r = 1; r <= reach; r++) {
+    let snow = 0
+    let bare = 0
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
+        const n = terrainAt(x + dx, y + dy)
+        if (skip(n, x + dx, y + dy)) continue
+        if (n === 'snow') snow++
+        else if (BARE.has(n)) bare++
+      }
+    if (snow || bare) return snow > bare
+  }
+  return false
+}
+
+/**
+ * Is a way (a path or dirt) trodden through snow: is most of the open ground round it (not the way itself) snow? Then
+ * it is drawn in the snow's own set (catalog `path_snow`: trodden snow, a grey rim on the snow), not as a dirt road
+ * with a grass verge, and the snow runs on under it.
+ */
+function inSnow(catalog: Catalog, terrainAt: (x: number, y: number) => string, x: number, y: number): boolean {
+  if (!catalog.blobs.path_snow) return false
+  const way = groupOf(catalog, 'path')
+  return snowRing(terrainAt, x, y, 3, (n) => groupOf(catalog, n) === way)
+}
+
+/** Resolve the atlas tile index for a cell. `terrainAt` returns the terrain at map coords. */
+export function groundTile(atlas: GroundAtlas, catalog: Catalog, terrainAt: (x: number, y: number) => string, x: number, y: number, shoreless = false): number {
+  const t = terrainAt(x, y)
+  const key = drawnAs(catalog, t)
+  const tint = TINT[t]
+  // an alias draws as its terrain, over that terrain's underlay (the overworld's snowfield is snow over grass)
+  const below = UNDER[t] ?? UNDER[key]
+  const under = below ? fullTile(() => {}, catalog, below) : undefined
+  const h = hash2(x, y)
+  const way = groupOf(catalog, 'path')
+  // a way trodden through snow: the snow's own path, its edges by the way's own cells as ever
+  const b = key === 'path' && inSnow(catalog, terrainAt, x, y) ? catalog.blobs.path_snow : catalog.blobs[key]
+  if (b) {
+    const g = groupOf(catalog, t)
+    // underground pools have no grassy shore: draw water as the full inner tile
+    // (water meets ice as more of itself: the river under it, no shore)
+    const water = g === groupOf(catalog, 'water')
+    // snow runs on under a way trodden through it and up against a wall standing in it: no drift's rim there
+    const snow = t === 'snow'
+    // a block whose edges show grass (sand, mud: `edgeOn`) has an edge only against grass; beside water or a road it runs on
+    const apart = (n: string) => !b.edgeOn || b.edgeOn.includes(n)
+    // a laid ground runs on under a ground laid higher, a water and a road: their edges are drawn over it
+    const above = (n: string) => b.layer !== undefined && layerOf(catalog, n) > b.layer
+    const joins = (n: string, nx: number, ny: number) =>
+      groupOf(catalog, n) === g || (water && n === 'ice') || !apart(n) || above(n) || (snow && (SNOW_BANKS.has(n) || (groupOf(catalog, n) === way && inSnow(catalog, terrainAt, nx, ny))))
+    const sig = shoreless && water ? 255 : wantSig((dx, dy) => joins(terrainAt(x + dx, y + dy), x + dx, y + dy))
+    // the whole tile, or one of its other looks
+    const [dc, dr] = sig === 255 && b.fills ? fillOf(b.fills, h) : (BLOB47[sig] ?? nearestBlob(sig))
+    // a laid ground's open edge shows the ground beside it that lies below it
+    const beneath = b.over !== undefined && sig !== 255 ? fullTile(() => {}, catalog, drawnAs(catalog, laidOn(catalog, terrainAt, x, y, g, b.layer ?? Infinity, b.over))) : under
+    return atlas.tile(b.img, b.col + dc, b.row + dr, tint, beneath)
+  }
+  // Cave walls: only the row facing open floor shows a rock face; deeper rock is dark void.
+  if (t === 'cave_wall' && terrainAt(x, y + 1) === 'cave_wall') {
+    const v = catalog.plain.void?.[0]
+    if (v) return atlas.tile(v[0], v[1], v[2])
+  }
+  const list = catalog.plain[key] ?? catalog.plain.grass
+  if (!list?.length) return 0
+  const v = h % 10 < 6 ? list[0] : list[h % list.length]
+  return atlas.tile(v[0], v[1], v[2], tint, under)
+}
+
+/** Where a laid ground lies among the laid ones (a plain ground 0, a block with no layer above them all). */
+function layerOf(catalog: Catalog, terrain: string): number {
+  const b = catalog.blobs[drawnAs(catalog, terrain)]
+  return b ? (b.layer ?? Infinity) : 0
+}
+
+/** The ground a laid one at (x, y) lies on: the commonest of its neighbours' grounds below `layer`, else `fallback`. */
+function laidOn(catalog: Catalog, terrainAt: (x: number, y: number) => string, x: number, y: number, group: string, layer: number, fallback: string): string {
+  const count = new Map<string, number>()
+  for (let dy = -1; dy <= 1; dy++)
+    for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue
+      const n = terrainAt(x + dx, y + dy)
+      if (groupOf(catalog, n) === group || layerOf(catalog, n) >= layer) continue
+      // the sides weigh more than the corners
+      count.set(n, (count.get(n) ?? 0) + (dx && dy ? 1 : 2))
+    }
+  let best = fallback
+  let most = 0
+  for (const [n, c] of count) if (c > most) (best = n), (most = c)
+  return best
+}
+
+/** A blob's whole tile by position: its own, or one of the `fills` others in its fifth row. */
+function fillOf(fills: number, h: number): [number, number] {
+  const i = (h >>> 3) % (fills + 1)
+  return i === fills ? BLOB47[255] : [i, 4]
+}
+
+function nearestBlob(sig: number): [number, number] {
+  let best: [number, number] = BLOB47[255]
+  let bestD = Infinity
+  for (const [k, off] of Object.entries(BLOB47)) {
+    const d = popcount((Number(k) ^ sig) & 0b01010101) * 3 + popcount((Number(k) ^ sig) & 0b10101010)
+    if (d < bestD) (bestD = d), (best = off)
+  }
+  return best
+}
+
+/** What stands, rather than lies: a cell of these is never the ground drawn under a building. */
+const STANDING = new Set(['wall', 'woodwall', 'door', 'roof', 'tree', 'pine', 'bush', 'thornhedge', 'rock', 'cave_wall', 'burnt_wall', 'charred_tree', 'void', 'stump'])
+
+/**
+ * The ground under a map's buildings and fences (its prefab stamps): a stamp's solid cells are wall terrain, so the
+ * map knows they block, but they are drawn as the ground round them — grass, cobble, sand — never as a wall tile
+ * showing through wherever the building's picture is open (a roof's rounded corners, between a fence's rails). Returns
+ * a terrain reader for the ground layer: the ground beneath a stamped cell, else the terrain itself. A stamp drawn as
+ * ground (the spring) keeps its own.
+ */
+export function groundBeneath(catalog: Catalog, stamps: { key: string; x: number; y: number }[] | undefined, terrainAt: (x: number, y: number) => string): (x: number, y: number) => string {
+  const covered = new Set<string>()
+  for (const s of stamps ?? []) {
+    const p = catalog.prefabs[s.key]
+    if (!p || p.ground) continue
+    p.grid.forEach((row, j) => [...row].forEach((c, i) => (c === '#' || c === 'D') && covered.add(`${s.x + i},${s.y + j}`)))
+  }
+  // what stands in the snow (a pine, a rock) stands in snow, not on a square of grass: its own ground is drawn as grass
+  // (catalog plain), so where the open ground round it is mostly snow the snow is drawn under it (read live: a pine felled
+  // or a rock broken changes it)
+  const way = groupOf(catalog, 'path')
+  const passed = (n: string, x: number, y: number) => covered.has(`${x},${y}`) || groupOf(catalog, n) === way
+  const ground = (x: number, y: number): string => {
+    const t = terrainAt(x, y)
+    return OBJECTS.has(t) && snowRing(terrainAt, x, y, 4, passed) ? 'snow' : t
+  }
+  if (!covered.size) return ground
+  const beneath = new Map<string, string>()
+  const under = (x: number, y: number): string => {
+    const k = `${x},${y}`
+    const known = beneath.get(k)
+    if (known) return known
+    // the nearest ring of open ground round it, by what most of that ring is (grass where it ties)
+    let found = 'grass'
+    for (let r = 1; r <= 8; r++) {
+      const count = new Map<string, number>()
+      for (let dy = -r; dy <= r; dy++)
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r || covered.has(`${x + dx},${y + dy}`)) continue
+          const t = terrainAt(x + dx, y + dy)
+          if (!STANDING.has(t)) count.set(t, (count.get(t) ?? 0) + 1)
+        }
+      if (!count.size) continue
+      found = [...count].sort((a, b) => b[1] - a[1] || (a[0] === 'grass' ? -1 : b[0] === 'grass' ? 1 : 0))[0][0]
+      break
+    }
+    beneath.set(k, found)
+    return found
+  }
+  return (x, y) => (covered.has(`${x},${y}`) ? under(x, y) : ground(x, y))
+}
+
+/** Terrains whose objects sit off the grid when the catalogue does not say (`looseObjects`). */
+const LOOSE = ['drygrass', 'flowers', 'bush']
+
+/**
+ * What stands on a cell, as both renderers draw it (scene.ts placeObject, the wiki's render-map): the terrain's object
+ * in the look its ground gives it, its heart's look deep inside a mass of its own kind (`<terrain>_inner`), picked by
+ * position, a loose one nudged off the grid. `key` names the look and the pick.
+ */
+export function objectAt(catalog: Catalog, terrainAt: (x: number, y: number) => string, groundAt: (x: number, y: number) => string, x: number, y: number): { key: string; def: SpriteDef; dx: number; dy: number } | undefined {
+  const t = terrainAt(x, y)
+  let look = objectLook(catalog, t, groundAt(x, y))
+  if (catalog.terrainObjects[`${look}_inner`]?.length && terrainAt(x, y - 1) === t && terrainAt(x + 1, y) === t && terrainAt(x, y + 1) === t && terrainAt(x - 1, y) === t) look = `${look}_inner`
+  const list = catalog.terrainObjects[look]
+  if (!list?.length) return undefined
+  // tall grass is a meadow, not a crop: a third of its tiles stay bare
+  if (t === 'drygrass' && hash2(x, y, 13) % 100 < 35) return undefined
+  const i = hash2(x, y, 11) % list.length
+  const loose = (catalog.looseObjects ?? LOOSE).includes(t)
+  return { key: `${look}:${i}`, def: list[i], dx: loose ? (hash2(x, y, 17) % 9) - 4 : 0, dy: loose ? (hash2(x, y, 19) % 5) - 2 : 0 }
+}
+
+/** Terrains drawn as a thing standing on the ground (scene.ts placeObject): a tree, a pine, a bush, a rock, a stump. */
+const OBJECTS = new Set(['tree', 'pine', 'bush', 'thornhedge', 'rock', 'stump', 'charred_tree'])
+
+/**
+ * The look a terrain's standing thing takes from the ground it stands in: in snow, its winter one where the catalogue
+ * has it (`pine_snow`, `rock_snow`), else its own. Both renderers ask (scene.ts placeObject, the wiki's render-map).
+ */
+export function objectLook(catalog: Catalog, t: string, ground: string): string {
+  return ground === 'snow' && catalog.terrainObjects[`${t}_snow`]?.length ? `${t}_snow` : t
+}
