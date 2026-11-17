@@ -35,9 +35,11 @@ export class NarrativePanel {
   private readonly choices: HTMLElement
   private readonly status: HTMLElement
   private readonly form: HTMLFormElement
-  private readonly input: HTMLInputElement
+  private readonly input: HTMLTextAreaElement
   private readonly retry: HTMLButtonElement
   private retryTurn: string | undefined
+  /** The field had the keyboard when it was disabled for a turn: it takes it back when the answer comes. */
+  private refocus = false
 
   constructor(private readonly hooks: NarrativeHooks) {
     this.button = el('button', 'narr-btn', 'Story')
@@ -60,32 +62,42 @@ export class NarrativePanel {
     this.status = el('p', 'narr-status')
 
     this.form = el('form', 'narr-form')
-    this.input = el('input', 'narr-input')
-    this.input.type = 'text'
+    // A text area: Enter sends, and Shift+Enter is a line of its own (a spoken paragraph, an aside).
+    this.input = el('textarea', 'narr-input')
+    this.input.rows = 1
     this.input.maxLength = 500
     this.input.autocomplete = 'off'
+    this.input.spellcheck = false
+    this.input.setAttribute('aria-label', 'Say, ask, or act in words')
     this.input.placeholder = 'Say, ask, or try something…'
     const send = el('button', 'narr-send', 'Send')
     send.type = 'submit'
     this.form.append(this.input, send)
     this.form.onsubmit = (event) => {
       event.preventDefault()
-      const text = this.input.value.trim()
-      if (!text) return
-      this.input.value = ''
-      this.busy('Thinking…')
-      this.hooks.ask(text)
+      this.submit()
     }
-    // the game's keys never reach the page while one is typing here
-    for (const type of ['keydown', 'keyup', 'keypress'] as const) {
-      this.input.addEventListener(type, (event) => {
+    // The keyboard is the field's while it has it: every gameplay handler is gated on that (input/ownership.ts), so
+    // nothing here has to stop events from reaching the page. Enter is one message — through the form's own submit,
+    // so the button and the key take the same path — and Shift+Enter stays the field's newline.
+    this.input.addEventListener('keydown', (event) => {
+      const key = event as KeyboardEvent
+      if (key.isComposing) return
+      if (key.key === 'Escape') {
+        event.preventDefault()
         event.stopPropagation()
-        if (type === 'keydown' && (event as KeyboardEvent).key === 'Escape') {
-          this.toggle(false)
-          this.input.blur()
-        }
-      })
-    }
+        this.toggle(false)
+        this.input.blur()
+        return
+      }
+      if (key.key !== 'Enter') return
+      // (neither Enter nor Shift+Enter is a gameplay key: the world never sees either)
+      event.stopPropagation()
+      if (key.shiftKey) return
+      event.preventDefault()
+      this.form.requestSubmit()
+    })
+    this.input.addEventListener('input', () => this.resize())
 
     this.retry = el('button', 'narr-retry hidden', 'Regenerate the last turn')
     this.retry.type = 'button'
@@ -113,7 +125,27 @@ export class NarrativePanel {
   busy(what = 'Thinking…'): void {
     this.status.textContent = what
     this.status.className = 'narr-status narr-busy'
+    this.refocus = document.activeElement === this.input
     this.input.disabled = true
+  }
+
+  /** One ask per press: the field is emptied before the words go, so a second Enter finds nothing to send. */
+  private submit(): void {
+    if (this.input.disabled) return
+    const text = this.input.value.trim()
+    if (!text) return
+    this.input.value = ''
+    this.resize()
+    this.busy('Thinking…')
+    this.hooks.ask(text)
+  }
+
+  /** As tall as what has been said, up to a few lines (the panel keeps its place over the world). */
+  private resize(): void {
+    // (a page with no layout — a test — has no height to measure: the field keeps the one its CSS gives it)
+    if (!this.input.scrollHeight) return
+    this.input.style.height = 'auto'
+    this.input.style.height = `${Math.min(this.input.scrollHeight, 96)}px`
   }
 
   toggle(open = !this.open): void {
@@ -129,7 +161,13 @@ export class NarrativePanel {
 
   private render(): void {
     const view = this.view
+    const wasDisabled = this.input.disabled
     this.input.disabled = false
+    // a field that had the keyboard when the turn began takes it back when the answer comes
+    if (wasDisabled && this.refocus && this.open && (!document.activeElement || document.activeElement === document.body)) {
+      this.refocus = false
+      this.input.focus()
+    }
     if (!view) {
       this.list.replaceChildren(el('p', 'narr-empty', 'No story yet. Begin a game.'))
       return

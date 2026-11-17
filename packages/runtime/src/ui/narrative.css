@@ -55,9 +55,12 @@
 .narr-form { display: flex; gap: 6px; padding: 9px 12px; border-top: 1px solid #4a3f2c; }
 .narr-input {
   flex: 1; min-width: 0; padding: 7px 9px; border: 1px solid #5d4f36; border-radius: 5px;
-  background: rgba(12, 10, 7, 0.9); color: #efe4ca; font: inherit; font-size: 13px;
+  background: rgba(12, 10, 7, 0.9); color: #efe4ca; font: inherit; font-size: 13px; font-family: inherit;
+  /* a text area one line tall that grows with what is said (Shift+Enter is a line of its own) */
+  line-height: 1.35; resize: none; overflow-y: auto; max-height: 96px;
 }
-.narr-input:focus { outline: 1px solid #a58b54; }
+.narr-input:focus, .narr-input:focus-visible { outline: 2px solid #d6b46a; outline-offset: 1px; }
+.narr-input:disabled { opacity: 0.55; }
 .narr-send {
   padding: 7px 12px; border: 1px solid #7a6a46; border-radius: 5px;
   background: rgba(70, 58, 38, 0.8); color: #f0e3c6; font: inherit; font-size: 12px; cursor: pointer;

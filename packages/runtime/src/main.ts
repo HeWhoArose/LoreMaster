@@ -30,6 +30,7 @@ import { LessonGuide } from './ui/lesson.ts'
 import { Menu, setLearnedRecipes } from './ui/menu.ts'
 import { PeoplePanels } from './ui/people.ts'
 import { NarrativePanel } from './ui/narrative.ts'
+import { gameOwnsKey, installInputOwnership, isTyping } from './input/ownership.ts'
 import { SkillBar } from './ui/skillbar.ts'
 import { Tooltip, setLearnedStatuses, type TipContext } from './ui/tooltip.ts'
 import { Minimap } from './ui/worldmap.ts'
@@ -80,7 +81,7 @@ let abilities: Ability[] = []
 let selectedAbility: Ability | undefined
 /** Gameplay-only gate: quick abilities must not fire over the UI, a scene, or an input. */
 function abilityPlayReady(): boolean {
-  if (typing()) return false
+  if (isTyping()) return false
   if (menu.anyOpen || dev.open || building.open) return false
   if (fishingIsActive() || hud.dialogOpen || hud.talkOpen || hud.questionShown || hud.chooserOpen) return false
   if (people.open) return false
@@ -1061,19 +1062,21 @@ const fishingRelease = (source: 'mouse' | 'space') => {
 const clearFishingInputs = () => {
   if (fishingInputs.clear().length) send({ t: 'fishing', action: 'release' })
 }
+/** A key's press under way (E, G): its code, the input it is, where the pointer aimed. */
+let pressing: { by: string; key: Key; tile?: Tile; timer: ReturnType<typeof setTimeout>; long: boolean } | undefined
 const stopMoving = () => {
   held.length = 0
   walkHeld = runHeld = false
+  // a long press under way is the keyboard's too: it ends with the rest rather than firing into the field
+  if (pressing) (clearTimeout(pressing.timer), (pressing = undefined))
   syncMove()
   setAttack(false)
   setSwing(false)
   clearFishingInputs()
 }
-
-const typing = () => {
-  const a = document.activeElement
-  return !!a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT')
-}
+// The keyboard changes hands: the moment a text field takes it, what the game held goes (input/ownership.ts). Its
+// keyups go to the field, so nothing may stay down from a key pressed before the player clicked into it.
+installInputOwnership({ stop: stopMoving })
 
 // The inputs (design.md §5.2): E the hand (what lies loose is picked up, anything else handled: talk, open, read),
 // G puts down, in or on, or hands over; the left click is the held thing's own use — a tool's work or a weapon's
@@ -1083,8 +1086,6 @@ const typing = () => {
 // of what is drawn where the pointer is; a long press of E or G, or Alt with a click, opens the chooser of all of it
 // the input reaches (people, things, items, the ground, oneself, the ceiling), so every event is reachable.
 const LONG_MS = 380
-/** A key's press under way: its code, the input it is, where the pointer aimed. */
-let pressing: { by: string; key: Key; tile?: Tile; timer: ReturnType<typeof setTimeout>; long: boolean } | undefined
 /** What opened the chooser (its title). */
 let chooserBy = ''
 
@@ -1127,8 +1128,9 @@ function aimFront(): Tile {
 
 window.addEventListener('keydown', (e) => {
   if (research.open) return
-  if (typing()) {
-    if (e.key === 'Escape') (document.activeElement as HTMLElement).blur()
+  // A text field has the keyboard (or the key came from one): it is the field's, never the world's.
+  if (!gameOwnsKey(e)) {
+    if (e.key === 'Escape') (document.activeElement as HTMLElement | null)?.blur()
     return
   }
   // the story panel closes on Esc before the menu opens
@@ -1269,6 +1271,9 @@ window.addEventListener('keydown', (e) => {
   if (slot >= 0) send({ t: 'select', slot })
 })
 window.addEventListener('keyup', (e) => {
+  // A key typed in a text field is the field's: the game never held it (a field taking the keyboard clears what was
+  // held, so a keyup that goes to the field can leave nothing stuck).
+  if (!gameOwnsKey(e)) return
   if (e.code === 'Escape' && fishingEscapeHeld) {
     fishingEscapeHeld = false
     return

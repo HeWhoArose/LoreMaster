@@ -8,6 +8,7 @@ import { game } from '../game.ts'
 import { $, esc, locale } from './common.ts'
 import { template } from './template.ts'
 import { mountCloseButton } from './components/window.ts'
+import { isTyping } from '../input/ownership.ts'
 
 export { template }
 
@@ -54,12 +55,12 @@ export class ModConsole {
     this.records = records
     this.library = library
     if (!this.selected && records.length) this.selected = records[records.length - 1].id
-    if (this.open && !typing()) this.render()
+    if (this.open && !isTyping()) this.render()
   }
 
   setModder(m: { online: boolean; url?: string; model?: string | null }): void {
     this.modder = m
-    if (this.open && !typing()) this.render()
+    if (this.open && !isTyping()) this.render()
   }
 
   setSpec(spec: ModSpec): void {
@@ -248,11 +249,6 @@ export class ModConsole {
         <tr><td>tick</td><td>${f?.tick ?? 0}</td></tr>
       </table>`
   }
-}
-
-function typing(): boolean {
-  const a = document.activeElement
-  return !!a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT')
 }
 
 function ruleCard(r: Rule): string {
