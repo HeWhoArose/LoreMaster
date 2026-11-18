@@ -619,3 +619,416 @@ For each relevant feature, the classification requested in the audit:
 ---
 
 End of blueprint. Review before any Phase 1 implementation.
+
+---
+
+# Master Roadmap Integration
+
+## 15. Master Development Roadmap and Freebuff Execution Mission
+
+This document is both the detailed product identity/interface specification and the governing product-direction brief for the next stages of LoreMaster. The roadmap below expands the interface blueprint into the complete product programme. It does not replace the source-backed findings or decisions in earlier sections.
+
+### 15.1 Product vision and non-negotiable architecture
+
+LoreMaster is a story-centred, AI-assisted open-world RPG. It combines a modern, cinematic application experience with the retained OpenWorld pixel-art gameplay world.
+
+The intended product journey is:
+
+1. LoreMaster-branded opening experience.
+2. LoreMaster home screen.
+3. Story library, featured/resumable story, or world selection.
+4. Character creation when starting a new adventure.
+5. Gameplay inside the selected world.
+
+The application shell and gameplay presentation are distinct visual layers:
+
+- **Application layer:** LoreMaster branding, home, story cards, cover artwork, library, discovery, navigation, settings and world selection. Use a modern non-pixel visual language.
+- **Gameplay layer:** retain the OpenWorld renderer and pixel-art characters, NPCs, monsters, environments, world objects and in-game object icons. Redesign surrounding interface elements in LoreMaster's visual language without replacing the renderer.
+
+OpenWorld remains authoritative for simulation and gameplay state. The narrative system may interpret player intent, propose actions and describe outcomes, but it must not independently invent or apply world-state changes. Use one canonical action/narrative pipeline and one canonical dialogue result; separate UI panels must display the same canonical content rather than independently generating variations.
+
+Reuse existing systems before creating replacements. Do not create a second home experience, save system, character creator, narrative engine or parallel gameplay runtime. Preserve web and Android targets, offline-first core gameplay and BYOK-only AI access. Do not introduce a mandatory hosted AI service or owner-managed API keys.
+
+### 15.2 Master implementation phases
+
+The phases below are the authoritative proposed order. A phase may be split into smaller tracked tasks, but its dependencies and acceptance criteria must remain visible. Research and non-invasive audits may run in parallel where they do not disrupt the active implementation phase.
+
+#### Phase 0 — Audit, verification and project governance
+
+**Objectives**
+- Establish the actual repository/workspace, branch, commit and working-tree state before making changes.
+- Reconcile existing project documentation and known audit findings.
+- Verify the current state of the engine, client, runtime, narration, saves, creator, world content, tests and Android configuration.
+- Establish one authoritative roadmap and progress tracker.
+
+**Acceptance criteria**
+- Repository identity and branch are recorded from actual Git evidence.
+- Existing functionality is classified as verified, partial, planned, blocked or unknown.
+- Known test failures and environmental blockers are explicitly recorded; no suite is described as passing without a completed run and exit status.
+- Existing documents are reused where appropriate; conflicting or duplicate plans are identified and resolved.
+- The product identity blueprint remains intact and is referenced by the master plan.
+
+#### Phase 1 — LoreMaster identity and application foundation
+
+**Objectives**
+- Establish the LoreMaster logo, brand identity, opening experience and modern application design system.
+- Create the application shell that hosts the home screen, library, discovery, settings and world/story entry flows.
+- Remove the old OpenWorld-branded title screen from the normal user-facing launch journey.
+
+**Important implementation constraint**
+The existing OpenWorld Cover implementation may contain reusable start-game, save selection, loading, settings or other runtime logic. Inspect and preserve those contracts. Do not simply delete the Cover system or bypass required initialization. Determine the safest handoff from the LoreMaster shell into the existing game-start/runtime flow.
+
+**Acceptance criteria**
+- Fresh launch presents LoreMaster branding, not the old OpenWorld title screen.
+- The home experience is the default application landing page.
+- Existing save/start functionality remains operational through the new entry flow.
+- No duplicate game-start or save-management implementation is introduced.
+- Web and Android shell behaviour is verified.
+
+#### Phase 2 — Story-centred home, library and navigation
+
+**Objectives**
+- Implement one large featured or resumable story card.
+- Show smaller story cards beneath/alongside it as appropriate.
+- Display a main cover for each story and separate artwork for each act.
+- Provide story progress, current act and resume functionality.
+- Provide a story library, Discover New Worlds section, application navigation and settings.
+- Reuse the existing save system and existing DreamVille image identity/prompt-contract patterns where appropriate.
+
+**Artwork and data constraints**
+- Preserve the distinction between a world, a story/run and its acts.
+- DreamVille's inspected image contracts include `world_cover` and `story_run_cover`; do not claim that `act_cover` already exists.
+- Define an explicit story-to-act relationship sufficient to identify the current act and its artwork target.
+- Add the smallest appropriate act-art contract extension within the existing image-contract family. Do not build a parallel image-generation system.
+- Generated artwork must represent the correct current story/act and must not invent future events or recap details as if they were current.
+
+**Acceptance criteria**
+- A player can distinguish featured, resumable and new stories.
+- Existing saves are discoverable and resumable without data loss.
+- Story and act artwork targets are unambiguous.
+- Discover can initially be a curated placeholder/library surface; a full marketplace is not required in this phase.
+
+#### Phase 3 — External asset discovery and LoreMaster asset catalogue
+
+**Objectives**
+Research and catalogue existing lawful assets before commissioning or generating large quantities of replacements. Candidate discovery sources may include Kenney, OpenGameArt, itch.io asset collections, Game-icons.net, Ninja Adventure, FreePixel.Art and relevant GitHub repositories. These are research leads, not automatic licence approval.
+
+**Catalogue categories**
+- Player characters, NPCs and portraits.
+- Species, animals, monsters and bosses.
+- Weapons, armour, clothing and equipment.
+- Powers, spells, skills and projectiles.
+- Visual effects, animations and particles.
+- Maps, tilesets, buildings, locations and environmental props.
+- UI icons and gameplay icons.
+- World, story and act artwork.
+- Audio and environmental sound.
+
+**Required metadata for every candidate**
+- Source URL and repository/package identity.
+- Creator/author where available.
+- Exact licence and version, plus a copy/link to the licence terms.
+- Attribution requirements.
+- Commercial-use permission.
+- Modification, redistribution and bundling permissions.
+- File formats, dimensions, animation frames, directions and dependencies.
+- Renderer/engine compatibility and required conversion/import work.
+- Category, tags and intended use.
+- Review status and any restrictions.
+
+Do not infer commercial permission from free download availability. Flag unclear, conflicting or missing licences for human review. Do not import assets with unacceptable or unknown usage rights into distributable builds.
+
+**Acceptance criteria**
+- A searchable, maintainable asset catalogue exists.
+- Candidate assets are classified by licence and technical compatibility.
+- The first import shortlist prioritises assets needed by the gladiator demonstration world.
+- Imported assets retain provenance and licence records.
+- No unnecessary duplicate asset-management subsystem is created.
+
+#### Phase 4 — Character creation and species diversity
+
+**Objectives**
+- Retain and extend the existing OpenWorld visual character creator.
+- Add a natural-language description step that recommends a compatible appearance using existing creator capabilities.
+- Let the player inspect and directly edit the recommendation before confirming.
+- Expand species diversity through explicit compatibility profiles rather than labels alone.
+
+**Character flow**
+1. Player describes the character in natural language.
+2. AI extracts structured, reviewable character traits.
+3. The recommendation is mapped to supported species and appearance options.
+4. The existing OpenWorld creator renders the recommendation.
+5. The player can change appearance choices directly.
+6. Only the player's confirmed character is committed to the game.
+
+DreamVille's character extraction, field-lock and provenance patterns may inform this flow, but do not replace the OpenWorld creator with a second creator.
+
+**Species profile considerations**
+- Identity and world availability.
+- Body and part compatibility.
+- Visible features and palettes.
+- Sprite assets and directional animations.
+- Equipment compatibility.
+- Gameplay attributes and abilities.
+- Any world-specific rules or limitations.
+- Missing-asset and approximation status.
+
+The inspected OpenWorld look table was reported to have four body definitions and twelve appearance slots, with no first-class species field. Re-check the current source before implementation; do not treat that historical observation as proof of the current branch state. Do not claim a species is fully supported until both its visual representation and gameplay compatibility have been tested.
+
+**Acceptance criteria**
+- Existing creator workflows still function.
+- AI recommendations use only verified compatible options or are clearly marked as approximations.
+- Players can edit recommendations before confirmation.
+- Species data does not silently bypass body, part, equipment or animation constraints.
+- Unsupported species are not presented as complete.
+
+#### Phase 5 — Gladiator demonstration world
+
+**Purpose**
+Build the first controlled LoreMaster adventure as an integration test of the actual RPG systems, not as a disconnected demo or throwaway engine.
+
+**Premise**
+The player is a gladiator waiting for their turn to fight. The story begins in a waiting area with other fighters and develops through preparation, NPC interactions, training, arena entry, fights and consequences.
+
+**Candidate locations and content**
+- Waiting room and fighter quarters.
+- Other fighters and rivals.
+- Guards, trainers and medical personnel.
+- Beds and resting areas.
+- Training area and practice equipment.
+- Weapons, armour and consumables.
+- Arena entrance and main fighting arena.
+- Spectators and relevant event locations.
+
+**Gameplay coverage**
+- Natural-language movement and movement toward named characters.
+- NPC selection, conversation and dialogue.
+- Object interaction, including using a bed to sleep/rest.
+- Training and equipment changes.
+- Inventory and item use.
+- Combat, damage, healing and consequences.
+- Location transitions and event triggers.
+- Story/act progression.
+- Save and resume across meaningful points.
+
+**Acceptance criteria**
+- The adventure uses the real OpenWorld simulation and LoreMaster narrative pipeline.
+- NPCs and objects have actual engine entities and valid interaction rules.
+- Story events follow authoritative game outcomes.
+- A player can complete a representative loop from introduction through arena encounter and subsequent consequence.
+- Save/resume restores the correct world and story state.
+
+#### Phase 6 — Gameplay interface redesign
+
+**Objectives**
+Modernise the interface surrounding the pixel-art game while preserving the renderer and in-world art style.
+
+Review and redesign as appropriate:
+- HUD and status display.
+- Story/narration panel.
+- Dedicated NPC dialogue and identity area.
+- Player action input.
+- NPC selection and information.
+- Inventory and equipment.
+- Character sheet.
+- Skills and abilities.
+- Quests and journal.
+- Map.
+- Pause and settings interfaces.
+
+**Canonical presentation rules**
+- NPC dialogue in the dedicated dialogue area and chronological narrative history must come from the same canonical dialogue result.
+- Player speech must be represented consistently in the world and in the narrative history.
+- UI components consume authoritative turn results; they must not call separate AI generation paths for the same event.
+- Pixel art remains appropriate for in-world entities and gameplay object icons. The application shell, branding, story covers and general application UI should not inherit pixel styling merely because the underlying engine uses pixel art.
+
+**Acceptance criteria**
+- Redesigned panels display actual runtime state.
+- Existing interactions remain reachable and usable.
+- Dialogue and narrative history do not diverge.
+- Keyboard ownership and input focus remain correct.
+- Responsive web and Android layouts are tested.
+
+#### Phase 7 — Natural-language gameplay and interaction reliability
+
+**Objectives**
+Make the game reliably interpret intentions beyond simple directional commands.
+
+Required interaction categories include:
+- Move left/right/up/down and move toward a named NPC or location.
+- Approach, follow, talk to and interact with named characters.
+- Identify and interact with objects.
+- Sleep/rest on a suitable bed.
+- Sit, train, pick up, equip and use items.
+- Talk, ask questions and respond in dialogue.
+- Combat and relevant abilities.
+- Enter/leave locations and travel.
+- Ordinary travel with meaningful route/location context.
+- Fast travel with a clear summary rather than a silent unexplained teleport.
+- Trigger and resolve world events.
+
+**Required action pipeline**
+1. Interpret the player's intention.
+2. Resolve the target against actual world entities and locations.
+3. Detect ambiguity and ask the player to clarify rather than guessing.
+4. Construct a typed, validated action proposal.
+5. Submit the proposal to the authoritative engine.
+6. Execute only actions accepted by engine rules.
+7. Read the actual resulting world state.
+8. Narrate that result.
+9. Update story progression and presentation from the same canonical turn result.
+
+Investigate intermittent Modder offline messages separately from action interpretation. Determine whether Modder is a required dependency, optional integration or an unrelated tool in the current runtime. Do not assume that an online Modder connection alone makes natural-language gameplay reliable.
+
+**Acceptance criteria**
+- Named-target movement works with multiple nearby candidates and ambiguous-target clarification.
+- Bed/sleep interaction succeeds only when the world entity and rules allow it.
+- Failed actions are narrated as failures, not fabricated successes.
+- NPC dialogue and action outcomes match engine state.
+- Interrupted turns do not claim completion.
+- Regeneration and rollback preserve authoritative state and existing snapshot rules.
+- Tests cover both successful and rejected interactions.
+
+#### Phase 8 — World-definition and custom-world architecture
+
+Only begin detailed implementation after the core application and gladiator gameplay demonstrate the required reusable foundations.
+
+**World definition dimensions**
+- Setting, tone, lore and history.
+- Geography, regions and locations.
+- Factions and social structures.
+- Species and their compatibility.
+- Attributes, equipment and progression.
+- Magic, technology and other capability systems.
+- Creatures, NPC behaviours and environmental rules.
+- Narrative constraints and content policy.
+- Asset packs and visual identity.
+
+Future examples include magical academies, supernatural/curse-based settings, medieval fantasy, mechanical samurai, medieval zombie survival and original science-fantasy worlds. These are examples of possible original settings, not a requirement to reproduce copyrighted franchises, protected characters, logos or proprietary assets.
+
+Do not hardcode every world's mechanics into one universal character sheet. Determine which capabilities are supported by the current engine and which require carefully scoped extensions. Keep world-specific rules data-driven where practical and validated by the engine.
+
+**Acceptance criteria**
+- A world can declare and validate its supported rules and content.
+- Unsupported mechanics are identified rather than silently simulated.
+- Existing OpenWorld worlds continue to work.
+- At least two meaningfully different test-world configurations can be loaded without duplicating the core runtime.
+
+#### Phase 9 — AI-assisted content creation
+
+**Objectives**
+Create validated workflows for authoring or generating:
+- NPCs and characters.
+- Species variants.
+- Monsters and bosses.
+- Weapons, armour and items.
+- Powers, spells and skills.
+- Maps, buildings and locations.
+- Artwork, effects and supported animations.
+- Dialogue, quests and story content.
+
+Reuse the asset catalogue, existing DreamVille image-generation patterns where appropriate, and OpenWorld's actual content contracts. Generated content must be validated for schema, engine compatibility, world rules, balance, provenance and licence constraints. AI must not invent engine capabilities or silently create invalid runtime data.
+
+**Acceptance criteria**
+- Generated content is previewable and reviewable before being added to a world.
+- Invalid content is rejected with actionable errors.
+- Asset provenance and licence information are retained.
+- Existing authored content remains usable.
+- Content generation cannot directly bypass authoritative engine validation.
+
+#### Phase 10 — Integration, optimisation and release
+
+Complete and record:
+- Unit and integration tests.
+- Browser UI and end-to-end gameplay tests.
+- Android builds and device/emulator tests where available.
+- Save/load and migration verification.
+- Offline-first behaviour.
+- BYOK configuration and provider failure handling.
+- Long-session performance and memory/resource testing.
+- Security and dependency review.
+- Production web build.
+- Android release build.
+- Documentation and release preparation.
+
+A successful HTTP response is not proof that gameplay works. A test discovery/dry run is not a completed test run. A prior Android build is not proof that the current source builds. Record exact commands, exit codes, test totals and environmental blockers.
+
+### 15.3 Cross-phase engineering rules
+
+1. Inspect and reuse existing systems before proposing replacements.
+2. Do not create a second home screen, save system, character creator, narrative engine or gameplay runtime.
+3. Preserve the OpenWorld pixel-art renderer and authoritative simulation.
+4. Keep the modern LoreMaster application shell visually distinct from in-game pixel art.
+5. Keep AI-generated proposals subordinate to engine validation.
+6. Keep web and Android compatibility.
+7. Preserve offline-first core gameplay and BYOK-only AI access.
+8. Do not introduce mandatory hosted AI or owner-managed API keys.
+9. Record provenance and licences for all imported or generated assets.
+10. Do not implement elaborate custom-world mechanics before the core RPG is reliable.
+11. Do not mark work complete without evidence against explicit acceptance criteria.
+12. Distinguish implemented, integrated, tested and user-verified states.
+13. Treat flaky tests, timeouts and missing test infrastructure as unresolved until properly diagnosed.
+14. Avoid broad refactors when a narrow integration with an existing contract is sufficient.
+15. Keep documentation aligned with the actual code and current branch.
+
+### 15.4 Progress tracking requirements
+
+Maintain a phase/task tracker with these statuses:
+
+- NOT STARTED
+- AUDITING
+- IN PROGRESS
+- BLOCKED
+- PARTIAL
+- VERIFICATION
+- COMPLETE
+
+For every phase and significant task record:
+- Objective and scope.
+- Existing systems to reuse.
+- Files/contracts affected.
+- Dependencies.
+- Acceptance criteria.
+- Tests and verification commands.
+- Actual results and exit codes.
+- Known defects and blockers.
+- Evidence links or source references.
+- Completion status and date.
+
+A phase is COMPLETE only when all mandatory acceptance criteria have been demonstrated. Documentation alone does not constitute implementation.
+
+### 15.5 Freebuff execution mission — next assignment
+
+The next Freebuff assignment is to reconcile and operationalise this blueprint, not to begin implementing all ten phases.
+
+1. Verify the actual LoreMaster repository, active workspace, branch, HEAD and working-tree state. Never use the obsolete Portal workspace.
+2. Read this entire blueprint and inspect the existing documentation structure.
+3. Preserve all existing source-backed sections and decisions.
+4. Compare the roadmap in this section with any existing master plan, tracker and architecture decision documents. Reuse existing documents where sensible; do not create duplicate authorities.
+5. Resolve the title-screen conflict explicitly: LoreMaster branding and the LoreMaster home screen are the normal launch experience; OpenWorld Cover logic may be reused internally where required for save/start/runtime contracts.
+6. Verify source-dependent claims against the current branch before changing them. In particular, re-check save/start contracts, story/act relationships, image slots, look/species definitions, creator compatibility, narrative boundaries and Android/web entry points.
+7. Identify contradictions, missing dependencies, outdated claims and scope overlaps. Record unresolved points rather than guessing.
+8. Update this blueprint and any genuinely necessary supporting roadmap/tracker/decision documents so that there is one coherent source of truth.
+9. Set honest initial progress statuses. Do not mark future phases as implemented or complete.
+10. Review the full diff for accidental deletion, duplicated systems, incorrect paths and unsupported claims.
+11. Commit documentation changes on the correct branch only after review, following the repository's contribution conventions.
+12. Report exact changed files, commit SHA, branch, decisions reconciled, unresolved issues and the next implementation task.
+
+Do not implement the application shell, character creator, asset imports, gladiator world or gameplay changes as part of this documentation assignment. Those belong to their respective phases and should begin only after this roadmap reconciliation is reviewed.
+
+### 15.6 Definition of success
+
+LoreMaster should become one coherent, extensible RPG product:
+
+- A recognisable LoreMaster-branded application experience.
+- A story-centred home and library with meaningful cover artwork.
+- A reusable character creation experience with genuine species diversity.
+- A growing, properly licensed asset collection.
+- A playable demonstration adventure that exercises real engine systems.
+- Reliable natural-language interaction grounded in authoritative simulation.
+- A world-definition architecture capable of supporting genuinely different settings and rule systems.
+- AI-assisted content creation that produces validated, usable game content.
+- A tested web and Android experience.
+
+The guiding principle is: **build the product once, make its worlds diverse, and let validated data and rules—not duplicated game implementations—provide that diversity.**
+
