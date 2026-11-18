@@ -17,7 +17,7 @@ const MAY_IMPORT: Record<string, string[]> = {
   stdlib: ['@openworld/engine'],
   format: ['@openworld/engine', '@openworld/stdlib', '@openworld/modules'],
   editor: ['@openworld/engine', '@openworld/stdlib', '@openworld/format', '@openworld/modules', '@openworld/runtime'],
-  runtime: ['@openworld/engine', '@openworld/modules', '@openworld/format'],
+  runtime: ['@openworld/engine', '@openworld/modules', '@openworld/format', '@openworld/narration'],
   // (the runtime's protocol with the player's own modder, which the AI's plugin speaks: runtime/src/modderProtocol.ts)
   bridge: ['@openworld/engine'],
   narration: ['@openworld/engine'],
