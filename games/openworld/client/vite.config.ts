@@ -6,6 +6,6 @@ export default defineConfig({
   base: './',
   publicDir: '../public',
   worker: { format: 'es' },
-  build: { target: 'es2022', chunkSizeWarningLimit: 4000, rollupOptions: { input: { game: 'index.html', bosses: 'boss-gallery.html', looks: 'looks.html' } } },
+  build: { target: 'es2022', chunkSizeWarningLimit: 4000, rollupOptions: { input: { game: 'index.html', bosses: 'boss-gallery.html', looks: 'looks.html', shell: 'shell.html' } } },
   server: { port: 5173 },
 })

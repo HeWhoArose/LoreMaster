@@ -39,6 +39,16 @@ export interface NewGame {
   look?: Look
 }
 
+/**
+ * What the cover opens with, when the application shell hands a player over (docs/phase1-design-specification.md §7):
+ * the look the new-game panel's creator starts from, and whether the new-game panel opens at once. Both are one-shot:
+ * the cover keeps nothing of them once it has opened.
+ */
+export interface CoverOptions {
+  look?: Look
+  panel?: 'new'
+}
+
 export interface CoverHandlers {
   /** Start a slot: from its save, or a new game in it (any save there is overwritten). */
   start(slot: Slot, data: SlotData | undefined, game?: NewGame): void
@@ -90,10 +100,17 @@ export class Cover {
   private next?: ReturnType<typeof setTimeout>
   private readonly onKey = (e: KeyboardEvent) => this.key(e)
 
+  private options: CoverOptions = {}
+  private look: Look = game().looks.player
+
   constructor(
     private world: string,
     private on: CoverHandlers,
-  ) {}
+    options: CoverOptions = {},
+  ) {
+    this.options = options
+    this.look = options.look ?? game().looks.player
+  }
 
   get open(): boolean {
     return !$('#intro').classList.contains('hidden')
@@ -103,8 +120,14 @@ export class Cover {
 
   async show(panel?: 'load'): Promise<void> {
     this.slots = await listSlots(this.world)
-    this.panel = panel
-    this.chosen = this.latest() ? 'continue' : 'new'
+    // (the shell's panel is one-shot: a later return to the title opens the title's own menu)
+    this.panel = panel ?? this.options.panel
+    this.options.panel = undefined
+    this.chosen = this.latest() && !this.panel ? 'continue' : 'new'
+    if (this.panel === 'new') {
+      this.newStep = Object.keys(game().looks.bodies).length ? 'look' : 'journey'
+      this.newSlot = SLOTS.find((slot) => !this.slots[slot - 1]) ?? 1
+    }
     this.drawn = this.lit = false
     this.loading = this.offerWaits = false
     // the menu waits for the world behind (none to wait for: at once)
@@ -407,8 +430,6 @@ export class Cover {
     </div>`
   }
 
-  /** The look a new game's traveller is made with (the new-game panel's creator). */
-  private look: Look = game().looks.player
   private creator?: Creator
 
   private wirePanel(): void {

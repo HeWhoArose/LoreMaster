@@ -14,8 +14,9 @@ import { kvDel, kvGet, kvSet } from './storage.ts'
 import { LOCAL_MODDER } from './modderProtocol.ts'
 import { ai } from './ai.ts'
 import { OwnModel, namedModder, ownModel } from './ownModel.ts'
-import { readSlot, writeSlot, type Slot } from './saves.ts'
-import { Cover } from './ui/cover.ts'
+import { readSlot, writeSlot, type Slot, type SlotData } from './saves.ts'
+import { takeShellHandoff } from './shellHandoff.ts'
+import { Cover, type NewGame } from './ui/cover.ts'
 import { DeathScreen } from './ui/death.ts'
 import { locale, prefs, relabelKeys, t, tx } from './ui/common.ts'
 import { actionOf, codeLabel, keyOf, keys, setLayout, type Action } from './keymap.ts'
@@ -883,15 +884,24 @@ let tutorialRun = false
 /** The codex version the open codex shows (-1: ask again on opening). */
 let codexSeen = -1
 
+/**
+ * A slot begun — the title's Continue, Load or new game, or the application shell's resume (docs/phase1-design-specification.md
+ * §7): one path for all of them, which tells the worker the slot's save, or a game begun afresh from its choices.
+ */
+const startSlot = async (s: Slot, data: SlotData | undefined, fresh?: NewGame): Promise<void> => {
+  slot = s
+  tutorialRun = false
+  quietSave = true
+  const library = await kvGet<LibraryData>(libraryKey())
+  const base = worldBase()
+  sendInit({ t: 'init', base, save: data?.save, library, librarySeq: await librarySeq(), prefetch: PARAMS.get('prefetch') === '1', quality: menu.ai.quality, difficulty: fresh?.difficulty, start: fresh?.start, look: fresh?.look })
+}
+
+/** What the application shell (shell.html) asked this page's title to do, taken once as the page boots. */
+const handoff = takeShellHandoff()
+
 const cover = new Cover(WORLD, {
-  start: async (s, data, game) => {
-    slot = s
-    tutorialRun = false
-    quietSave = true
-    const library = await kvGet<LibraryData>(libraryKey())
-    const base = worldBase()
-    sendInit({ t: 'init', base, save: data?.save, library, librarySeq: await librarySeq(), prefetch: PARAMS.get('prefetch') === '1', quality: menu.ai.quality, difficulty: game?.difficulty, start: game?.start, look: game?.look })
-  },
+  start: (s, data, fresh) => void startSlot(s, data, fresh),
   tutorial: async (game) => {
     // its own run: nothing is saved, and the story's main line is not reached from it
     slot = undefined
@@ -924,7 +934,7 @@ const cover = new Cover(WORLD, {
   levels: () => scene.audio?.levels(),
   titleMusic: (on) => scene.setTitleMusic(on),
   ai: menu.ai,
-})
+}, handoff?.kind === 'new' ? { look: handoff.look, panel: 'new' } : undefined)
 // (dev: the cover, for checking it by hand)
 if (import.meta.env.DEV) Object.assign((window as unknown as { lsw: object }).lsw, { cover })
 /**
@@ -954,9 +964,18 @@ if (reloadToken) {
   quietSave = true
   const scene = PARAMS.get('scene') ?? undefined
   void (async () => sendInit({ t: 'init', base: worldBase(), library: await kvGet<LibraryData>(libraryKey()), prefetch: PARAMS.get('prefetch') === '1', quality: menu.ai.quality, ...(at && { at }), ...(scene && { scene }) }))()
+} else if (handoff?.kind === 'resume') {
+  // the shell's Resume: the same start the title's Continue takes, from the slot's own save (nothing is duplicated)
+  void (async () => {
+    const wanted = handoff.slot ?? 1
+    const data = await readSlot(WORLD, wanted)
+    if (data) await startSlot(wanted, data)
+    else await cover.show()
+  })()
 } else {
   // no model to ask: the first thing the title offers is to choose one, or to play without AI (docs/byok.md). Asked
   // once the title is up: with no service to ask the answer comes at once, and an offer before the title is lost
+  // (a shell new game opens the title's own new-game panel here, its creator starting from the recommended look)
   void cover.show().then(needsModel).then((needs) => needs && cover.offerModel())
 }
 
