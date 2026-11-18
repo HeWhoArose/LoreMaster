@@ -15,7 +15,7 @@ This file is the LoreMaster program roadmap derived from blueprint section 15.2.
 Status: unresolved.
 
 - The existing `docs/roadmap.md` is the main OpenWorld main-game roadmap. It has its own milestones, dependencies, completion markers, and choices to confirm.
-- The blueprint’s section 15.2 defines LoreMaster master phases 0–10 as a separate program roadmap.
+- The blueprint's section 15.2 defines LoreMaster master phases 0–10 as a separate program roadmap.
 - These two systems overlap in subject matter but are not the same authority, and they are not yet reconciled into one agreed consolidated source of truth.
 - Until that authority decision is made, this file tracks the LoreMaster program phases only. It does not claim to supersede `docs/roadmap.md`, and it does not delete or rewrite the main-game roadmap.
 
@@ -25,33 +25,35 @@ This is the first unresolved issue and the main reason this tracker is narrow: i
 
 Use the status vocabulary from blueprint section 15.4 exactly:
 
-- `NOT STARTED` — nothing meaningful started for this phase yet.
-- `AUDITING` — verifying existing workspace, branch, source, documentation, contracts, and assumed facts against the actual repo.
-- `IN PROGRESS` — actively being done now.
-- `PLANNED` — proposed scope exists; work not started.
-- `PARTIAL` — some relevant work exists, but the phase is not complete.
-- `COMPLETE` — verified complete against the phase’s real acceptance criteria.
-- `UNKNOWN` — status cannot be honestly stated yet from current evidence.
+- `NOT STARTED`
+- `AUDITING`
+- `IN PROGRESS`
+- `BLOCKED`
+- `PARTIAL`
+- `VERIFICATION`
+- `COMPLETE`
+
+A phase is `COMPLETE` only when all mandatory acceptance criteria have been demonstrated. Documentation alone does not constitute implementation.
 
 ## Phase status summary
 
 Statuses below are honest as of this pass. They are not implementation achievements.
 
-- Phase 0 — audit/governance readiness: `IN PROGRESS`
-- Phase 1 — LoreMaster shell and continuity with existing OpenWorld: `PLANNED`
-- Phase 2 — story-centred home screen and story library: `PLANNED`
-- Phase 3 — external asset discovery and asset catalogue: `PLANNED`
-- Phase 4 — character creation and species diversity: `PLANNED`
-- Phase 5 — gladiator demonstration world: `PLANNED`
-- Phase 6 — gameplay interface redesign: `PLANNED`
-- Phase 7 — natural-language gameplay and reliability: `PLANNED`
-- Phase 8 — world definition and custom world creation: `PLANNED`
+- Phase 0 — Audit, verification and project governance: `IN PROGRESS`
+- Phase 1 — LoreMaster identity and application foundation: `PLANNED`
+- Phase 2 — Story-centred home, library and navigation: `PLANNED`
+- Phase 3 — External asset discovery and LoreMaster asset catalogue: `PLANNED`
+- Phase 4 — Character creation and species diversity: `PLANNED`
+- Phase 5 — Gladiator demonstration world: `PLANNED`
+- Phase 6 — Gameplay interface redesign: `PLANNED`
+- Phase 7 — Natural-language gameplay and interaction reliability: `PLANNED`
+- Phase 8 — World-definition and custom-world architecture: `PLANNED`
 - Phase 9 — AI-assisted content creation: `PLANNED`
-- Phase 10 — integration, optimisation, and release readiness: `PLANNED`
+- Phase 10 — Integration, optimisation and release: `PLANNED`
 
 No future phase is claimed complete. None of Phase 1–Phase 10 is started yet.
 
-## Phase 0 — audit/governance readiness
+## Phase 0 — Audit, verification and project governance
 
 Status: `IN PROGRESS`
 
@@ -67,8 +69,19 @@ Evidence from this pass:
 - `origin/master` is at `843747cf`, behind local `master` and `loremaster/master`.
 - `loremaster/master` is already at `2153868f`, same as local `master`.
 - Working tree is otherwise clean except unrelated untracked `nah_italic_report.json`.
-- Blueprint section 15.2 defines LoreMaster master phases 0–10.
-- Blueprint section 15.4 defines the status vocabulary used here.
+- Blueprint section 15.2 defines LoreMaster master phases 0–10 with these titles:
+  - Phase 0 — Audit, verification and project governance
+  - Phase 1 — LoreMaster identity and application foundation
+  - Phase 2 — Story-centred home, library and navigation
+  - Phase 3 — External asset discovery and LoreMaster asset catalogue
+  - Phase 4 — Character creation and species diversity
+  - Phase 5 — Gladiator demonstration world
+  - Phase 6 — Gameplay interface redesign
+  - Phase 7 — Natural-language gameplay and interaction reliability
+  - Phase 8 — World-definition and custom-world architecture
+  - Phase 9 — AI-assisted content creation
+  - Phase 10 — Integration, optimisation and release
+- Blueprint section 15.4 defines the status vocabulary used here, including the rule that `COMPLETE` requires demonstrated acceptance criteria.
 - Existing main-game roadmap `docs/roadmap.md` is preserved without editing.
 - Narration dependency-boundary line `narration: ['@openworld/engine']` is present in `packages/engine/test/boundaries.test.ts`.
 
@@ -78,55 +91,55 @@ What is still part of Phase 0 and not finished:
 - Recording an explicit transition rule for when a LoreMaster phase overlaps an existing main-game roadmap item.
 - Re-verifying source-dependent claims that the blueprint itself flags as uncertain, especially current look-table species/body state and any existing cover/artwork contracts, before implementation.
 
-## Phase 1 — LoreMaster shell and continuity with existing OpenWorld
+## Phase 1 — LoreMaster identity and application foundation
 
 Status: `PLANNED`
 
-Scope: establish the LoreMaster shell as the normal launch experience while preserving existing OpenWorld continuity, especially existing save/start/settings contracts and the existing game title contract in `packages/runtime/src/ui/cover.ts`.
+Scope: establish the LoreMaster shell and continuity with existing OpenWorld, including branding, home/library/discover navigation, save-summary-based story library and resume, world identity and cover artwork contracts, the AI-assisted appearance recommendation fed to the existing creator, and one end-to-end flow: choose world → describe character → AI recommendation → existing creator preview → approve → start game in a slot.
 
 This phase is planned, not implemented. The existing game title contract and its save/start/settings handling remain in place; Phase 1 is about the LoreMaster app shell and the documented Cover reuse/handoff, not deleting `cover.ts` or pretending it does not exist.
 
-## Phase 2 — story-centred home screen and story library
+## Phase 2 — Story-centred home, library and navigation
 
 Status: `PLANNED`
 
-Scope: story-centred home screen and story/library/navigation behavior from blueprint section 15.2.
+Scope: story-centred home screen, story library, current-act display, and app navigation from blueprint section 15.2 and section 2.
 
-## Phase 3 — external asset discovery and asset catalogue
-
-Status: `PLANNED`
-
-Scope: external asset discovery and asset catalogue/reporting behavior from blueprint section 15.2.
-
-## Phase 4 — character creation and species diversity
+## Phase 3 — External asset discovery and LoreMaster asset catalogue
 
 Status: `PLANNED`
 
-Scope: character creation and species diversity work from blueprint section 15.2.
+Scope: external asset discovery and the LoreMaster asset catalogue/reporting work from blueprint section 15.2 and section 5.
 
-## Phase 5 — gladiator demonstration world
+## Phase 4 — Character creation and species diversity
+
+Status: `PLANNED`
+
+Scope: character creation and species diversity work from blueprint section 15.2 and sections 6–7, including the species compatibility profile and only-new-when-needed assets.
+
+## Phase 5 — Gladiator demonstration world
 
 Status: `PLANNED`
 
 Scope: gladiator demonstration world from blueprint section 15.2.
 
-## Phase 6 — gameplay interface redesign
+## Phase 6 — Gameplay interface redesign
 
 Status: `PLANNED`
 
 Scope: gameplay interface redesign from blueprint section 15.2.
 
-## Phase 7 — natural-language gameplay and reliability
+## Phase 7 — Natural-language gameplay and interaction reliability
 
 Status: `PLANNED`
 
-Scope: natural-language gameplay and reliability work from blueprint section 15.2.
+Scope: natural-language gameplay and interaction reliability work from blueprint section 15.2.
 
-## Phase 8 — world definition and custom world creation
+## Phase 8 — World-definition and custom-world architecture
 
 Status: `PLANNED`
 
-Scope: world definition and custom world creation work from blueprint section 15.2.
+Scope: world-definition and custom-world architecture work from blueprint section 15.2.
 
 ## Phase 9 — AI-assisted content creation
 
@@ -134,11 +147,11 @@ Status: `PLANNED`
 
 Scope: AI-assisted content creation work from blueprint section 15.2.
 
-## Phase 10 — integration, optimisation, and release readiness
+## Phase 10 — Integration, optimisation and release
 
 Status: `PLANNED`
 
-Scope: integration, optimisation, and release-ready work from blueprint section 15.2.
+Scope: integration, optimisation and release-ready work from blueprint section 15.2.
 
 ## Progress tracking requirements
 
@@ -178,5 +191,5 @@ Then begin Phase 1:
 
 ## Notes
 
-- This file intentionally does not reproduce the milestones, world-model steps, event-model milestones, or choices from `docs/roadmap.md`. That is the main-game roadmap’s job.
+- This file intentionally does not reproduce the milestones, world-model steps, event-model milestones, or choices from `docs/roadmap.md`. That is the main-game roadmap's job.
 - This file intentionally does not reproduce `docs/creative-roadmap.md`, `docs/world-model.md`, `docs/design.md`, or `docs/engine-split.md`. Those remain their own artifacts.
