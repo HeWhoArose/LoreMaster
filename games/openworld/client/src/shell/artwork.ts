@@ -7,7 +7,7 @@
 // so a slot with no file still has a defined frame: the shell's own fallback treatment, never a broken picture.
 
 /** The kinds of picture the shell shows. */
-export type ArtworkKind = 'world-cover' | 'story-cover' | 'library-thumb' | 'act-cover'
+export type ArtworkKind = 'world-cover' | 'story-cover' | 'library-thumb' | 'act-cover' | 'story-hero' | 'world-hero'
 
 /** A picture the shell may show, and what a reader needs to know about it. */
 export interface ArtworkRef {
@@ -29,12 +29,15 @@ export interface ArtworkSlot {
   /** The frame once cards stack (narrower than 860px): wider, because the picture takes the full width. */
   narrowAspect: string
   /** Which edge the copy sits on, so the overlay darkens toward it. */
-  overlay: 'bottom' | 'inline-end' | 'none'
+  overlay: 'bottom' | 'inline-end' | 'none' | 'hero'
 }
 
 export const ARTWORK_SLOTS: Record<ArtworkKind, ArtworkSlot> = {
   // World covers are the shelf's own portrait: a place, not a moment.
   'world-cover': { kind: 'world-cover', aspect: '4 / 3', narrowAspect: '16 / 9', overlay: 'inline-end' },
+  // A hero band: the same picture at banner width, carrying the page's title and its one action.
+  'story-hero': { kind: 'story-hero', aspect: '21 / 9', narrowAspect: '16 / 9', overlay: 'hero' },
+  'world-hero': { kind: 'world-hero', aspect: '21 / 9', narrowAspect: '16 / 9', overlay: 'hero' },
   // The featured story's cover: a moment of the story the save is in.
   'story-cover': { kind: 'story-cover', aspect: '16 / 10', narrowAspect: '16 / 9', overlay: 'bottom' },
   // A library row's thumbnail: the same picture, cropped square and small.

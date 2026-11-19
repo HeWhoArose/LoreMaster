@@ -331,3 +331,76 @@ cd games/openworld/client && npx vite --port 5199    # then open /shell.html
 
 The shell's contract lives in `games/openworld/client/src/shell/contracts.ts`; the game-side seam is
 `packages/runtime/src/shellHandoff.ts` plus `startSlot`/`CoverOptions` in `packages/runtime/src/{main,ui/cover}.ts`.
+
+## Visual refinement and the outstanding checks — 2026-11-19
+
+A second pass over the same shell: the visual composition, and the acceptance items the previous pass left open.
+Baseline was `master` at `2253ca47` (pushed to `origin`). Phases, screens and handoffs are unchanged; this pass touched
+only the shell's presentation.
+
+### What changed
+
+- `games/openworld/client/src/shell/artwork.ts` — two hero slots added to the existing artwork family: `story-hero` and
+  `world-hero` (21 / 9 wide, 16 / 9 once the layout stacks, overlay `hero`). The slot records stay plain data; no picture
+  was generated or imported for this pass.
+- `games/openworld/client/src/shell/app.ts` — the featured area is now a banner (`banner()`): a save's own story with its
+  act, its last line and Resume, or, with no save, the same story's cover as the invitation to begin it. `stories()` shows
+  the other played slots as cards, or an honest note about the slots still open. `discoverBand()` gives the one playable
+  world the full width on Home, and `discover()` became a hero plus an "About" panel plus a motifs list. The image wiring
+  now marks a frame `loaded` (fade in) and `missing` (fallback) for both cached and fresh results.
+- `games/openworld/client/src/shell/styles.css` — `.lm-banner` (picture and copy share one grid cell; the picture sets the
+  height), `.lm-display`, the hero scrim, `.lm-band`, `.lm-empty`, `.lm-tags`, `.lm-pagehead`, quiet empty-slot styling,
+  the picture fade, and the narrow reflow where the copy moves below the picture. The page column is 1240px.
+
+### Visual decisions
+
+1. **One picture carries the page.** The featured story's picture is the page's ground; the copy sits on its lower edge
+   over a two-direction scrim (up from the bottom, in from the left). Text is never over a mid-tone: the scrim reaches
+   0.95 at the copy's edge.
+2. **Narrow layouts reflow instead of overlaying.** Below 860px the picture becomes a 16 / 9 band and the copy moves
+   beneath it on the panel's own surface, so no title has to fit inside a portrait crop.
+3. **One cover per page.** Home's hero uses the story cover (the broken seal — the story being offered or resumed); Home's
+   Discover band and the Discover hero use the world cover (the Ford and the Holy City). The two existing covers are
+   reused with their focal points; nothing new was generated.
+4. **Empty is composed, not blank.** With no save the hero is an invitation with a clear primary action; "Your stories"
+   states plainly that three save slots exist and where their progress comes from. No save, slot or progress is invented.
+5. **Discover is a shelf, not a marketplace.** One playable world gets a hero, a facts panel and a motifs row; the note
+   about later worlds stays a note with no play action.
+
+### Checks actually run
+
+| Command | Result |
+| --- | --- |
+| `npm run gen:world` | exit 0 — the world on disk predated the current content; the game page had been hanging at "Loading…" and now reaches its player |
+| `npx vitest run games/openworld/client/test/shell.test.ts` | **6/6 passed** |
+| `npx vitest run packages/engine/test/boundaries.test.ts` | 1 failed — "nothing reaches the AI…" hit the default 30s timeout (33.9s on this machine), no assertion failure |
+| `npx vitest run packages/engine/test/boundaries.test.ts --testTimeout=180000` | **6/6 passed** |
+| `npx tsc -p games/openworld/client --noEmit` | exit 0 |
+| `npm run build -w @openworld-game/client` | exit 0 — built in 53s; `dist/shell.html` rebuilt |
+| `npm run typecheck` | run in the background; did not finish within this session (see the report's limitations) |
+| `npx playwright test` | 26 tests: **21 passed, 5 failed**; all five failed at `waitForFunction(lsw.frame.player)` (the game page never reached a player within the spec's 90–240s) |
+| `npx playwright test tests/ui/game.spec.ts --workers=1` | retried alone: the first spec still failed after 4.0m — the cause is the host's dev-server speed, not worker contention |
+| `npx cap sync android` | exit 0 — synced `dist` (with `shell.html`) and rewrote `android/app/src/main/assets/capacitor.config.json` |
+| `JAVA_HOME=<JDK 21> ./gradlew assembleDebug --no-daemon` | **BUILD SUCCESSFUL in 3m47s** — `android/app/build/outputs/apk/debug/app-debug.apk`. The default `JAVA_HOME` here is JDK 17, which cannot compile Capacitor's `sourceCompatibility 21`; the build used the installed JDK 21 (`C:\Program Files\Eclipse Adoptium\jdk-21.0.13.9-hotspot`) |
+
+Browser sweep (Playwright, `http://localhost:5173/shell.html`, Chromium): 2 states × 4 routes × 5 viewports = **40
+checks**, all with no horizontal overflow, no clipped text, no control under 40px and no element outside the viewport.
+Screenshots: `docs/phase1/refined-2026-11-19-{first-run,saved}-{home,library,discover,settings}-<w>x<h>.png` for
+1920×1080, 1366×768, 768×1024, 390×844 and 360×800, plus `-create-`, `-creator-`, `-journey-` and `-game-1920x1080`.
+
+End-to-end, through the real controls: the shell's offline recommendation ("a woman, cropped silver hair, bright amber
+eyes, a scar across the cheek, a teal oilcloth coat, dark brown ankle boots") reached the existing pixel creator and the
+creator's own sentence matched it exactly; one step on its first slot changed it to "silver hair swept back" while the
+other fields stayed; Next reached the journey step; Begin adventure started the game; the game wrote its own slot; and
+the shell then read it back as "Continue · Act I — The First Seal", "Cloudtop · day 1 13:00 · Lv 1 · Slot 1 · saved
+Nov 19", Resume story. The only console error in the whole run is `ERR_CONNECTION_REFUSED` on `localhost:8787/health`,
+the modder probe of a local service that is not running.
+
+### Not demonstrated
+
+- The five Playwright specs that boot the real game page. Their waits time out because this host's Vite dev server needs
+  ~23s per HTML request and the game page loads hundreds of modules; the shell specs, the component specs and the font
+  specs all pass. Nothing in this pass touches the game page, `cover.ts`, the creator or `ui-lab.html`.
+- A live model recommendation (no service was connected; only the offline rule set was exercised).
+- Installation or play of the built APK on a device or emulator. The APK exists; it was not run.
+- Act illustrations: the `act_cover` contract still has no artwork, so cards fall back to the story cover.

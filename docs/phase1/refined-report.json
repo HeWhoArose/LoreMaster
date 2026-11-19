@@ -1,0 +1,979 @@
+{
+  "checks": [
+    {
+      "state": "first-run",
+      "width": 1920,
+      "route": "home",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 1920,
+      "route": "library",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 1920,
+      "route": "discover",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 1920,
+      "route": "settings",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 1366,
+      "route": "home",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 1366,
+      "route": "library",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 1366,
+      "route": "discover",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 1366,
+      "route": "settings",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 768,
+      "route": "home",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 768,
+      "route": "library",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 768,
+      "route": "discover",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 768,
+      "route": "settings",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 390,
+      "route": "home",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 390,
+      "route": "library",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 390,
+      "route": "discover",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 390,
+      "route": "settings",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 360,
+      "route": "home",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 360,
+      "route": "library",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 360,
+      "route": "discover",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "first-run",
+      "width": 360,
+      "route": "settings",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 1920,
+      "route": "home",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 1920,
+      "route": "library",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 1920,
+      "route": "discover",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 1920,
+      "route": "settings",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 1366,
+      "route": "home",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 1366,
+      "route": "library",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 1366,
+      "route": "discover",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 1366,
+      "route": "settings",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 768,
+      "route": "home",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 768,
+      "route": "library",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 768,
+      "route": "discover",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 768,
+      "route": "settings",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 390,
+      "route": "home",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 390,
+      "route": "library",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 390,
+      "route": "discover",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 390,
+      "route": "settings",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 360,
+      "route": "home",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 360,
+      "route": "library",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 360,
+      "route": "discover",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    },
+    {
+      "state": "saved",
+      "width": 360,
+      "route": "settings",
+      "overflow": 0,
+      "clipped": [],
+      "small": [],
+      "offscreen": []
+    }
+  ],
+  "images": [
+    {
+      "state": "first-run",
+      "route": "home",
+      "width": 1920,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "1158x496",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "home",
+      "width": 1920,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "492x284",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "library",
+      "width": 1920,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "116x116",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "library",
+      "width": 1920,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "116x116",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "library",
+      "width": 1920,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "116x116",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "discover",
+      "width": 1920,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "1158x496",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "home",
+      "width": 1366,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "1158x496",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "home",
+      "width": 1366,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "492x284",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "library",
+      "width": 1366,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "116x116",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "library",
+      "width": 1366,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "116x116",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "library",
+      "width": 1366,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "116x116",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "discover",
+      "width": 1366,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "1158x496",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "home",
+      "width": 768,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "705x396",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "home",
+      "width": 768,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "705x396",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "library",
+      "width": 768,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "library",
+      "width": 768,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "library",
+      "width": 768,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "discover",
+      "width": 768,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "705x396",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "home",
+      "width": 390,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "356x200",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "home",
+      "width": 390,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "356x200",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "library",
+      "width": 390,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "library",
+      "width": 390,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "library",
+      "width": 390,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "discover",
+      "width": 390,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "356x200",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "home",
+      "width": 360,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "326x183",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "home",
+      "width": 360,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "326x183",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "library",
+      "width": 360,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "library",
+      "width": 360,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "library",
+      "width": 360,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "first-run",
+      "route": "discover",
+      "width": 360,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "326x183",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "home",
+      "width": 1920,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "1158x496",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "home",
+      "width": 1920,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "492x284",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "library",
+      "width": 1920,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "116x116",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "library",
+      "width": 1920,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "116x116",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "library",
+      "width": 1920,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "116x116",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "discover",
+      "width": 1920,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "1158x496",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "home",
+      "width": 1366,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "1158x496",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "home",
+      "width": 1366,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "492x284",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "library",
+      "width": 1366,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "116x116",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "library",
+      "width": 1366,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "116x116",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "library",
+      "width": 1366,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "116x116",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "discover",
+      "width": 1366,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "1158x496",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "home",
+      "width": 768,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "705x396",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "home",
+      "width": 768,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "705x396",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "library",
+      "width": 768,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "library",
+      "width": 768,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "library",
+      "width": 768,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "discover",
+      "width": 768,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "705x396",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "home",
+      "width": 390,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "356x200",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "home",
+      "width": 390,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "356x200",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "library",
+      "width": 390,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "library",
+      "width": 390,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "library",
+      "width": 390,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "discover",
+      "width": 390,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "356x200",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "home",
+      "width": 360,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "326x183",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "home",
+      "width": 360,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "326x183",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "library",
+      "width": 360,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "library",
+      "width": 360,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "library",
+      "width": 360,
+      "src": "./assets/shell/story-five-seals.jpg",
+      "natural": 1248,
+      "shown": "92x92",
+      "missing": false,
+      "loaded": true
+    },
+    {
+      "state": "saved",
+      "route": "discover",
+      "width": 360,
+      "src": "./assets/shell/world-openworld.jpg",
+      "natural": 1392,
+      "shown": "326x183",
+      "missing": false,
+      "loaded": true
+    }
+  ],
+  "e2e": {
+    "recommended": "a woman, cropped silver hair, bright amber eyes, a scar across the cheek, a teal oilcloth coat, dark brown ankle boots",
+    "creatorWords": "a woman, cropped silver hair, bright amber eyes, a scar across the cheek, a teal oilcloth coat, dark brown ankle boots",
+    "creatorMatched": true,
+    "creatorAfterEdit": "a woman, silver hair swept back, bright amber eyes, a scar across the cheek, a teal oilcloth coat, dark brown ankle boots",
+    "editKept": true,
+    "gameReady": true,
+    "savedBanner": "Continue · Act I — The First Seal The Five Seals The night the first seal breaks, and the road that carries you through the other four. Cloudtop · day 1 13:00 · Lv 1 · Slot 1 · saved Nov 19 Resume story Your stories",
+    "resumeButtons": 1
+  },
+  "consoleErrors": [
+    "console: Failed to load resource: net::ERR_CONNECTION_REFUSED"
+  ]
+}

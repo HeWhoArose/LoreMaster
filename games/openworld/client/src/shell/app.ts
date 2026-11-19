@@ -186,13 +186,13 @@ function opening(): string {
  * One save's card. Its picture is the act's own illustration when that act has one, otherwise the story's cover;
  * a ``thumb'' shows the same picture in the library's small square frame.
  */
-function slotCard(slot: Slot, variant: 'featured' | 'plain' | 'thumb'): string {
+function slotCard(slot: Slot, variant: 'plain' | 'thumb'): string {
   const d = state.slots[slot - 1]
   const act = d?.summary ? currentAct(OPENWORLD_STORY, d.summary.day) : undefined
   const art = act?.art
-    ? artMarkup(act.art, 'act-cover')
+    ? artMarkup(act.art, variant === 'thumb' ? 'library-thumb' : 'story-cover')
     : artMarkup(OPENWORLD_STORY.cover, variant === 'thumb' ? 'library-thumb' : 'story-cover')
-  return `<article class="lm-card${variant === 'featured' ? ' featured' : ''}${variant === 'thumb' ? ' compact' : ''}${d ? '' : ' empty'}" data-slot="${slot}">
+  return `<article class="lm-card${variant === 'thumb' ? ' compact' : ''}${d ? '' : ' empty'}" data-slot="${slot}">
     ${art}
     <div class="lm-card-body">
       <p class="lm-kicker">${esc(en(OPENWORLD_STORY.title))}${act ? ` · ${esc(en(act.label))}` : ''}</p>
@@ -207,35 +207,81 @@ function slotCard(slot: Slot, variant: 'featured' | 'plain' | 'thumb'): string {
   </article>`
 }
 
-function home(): string {
+/**
+ * The featured banner: a save's own story — its cover, its act, its last line — or, with no save, the invitation to
+ * begin that story. The picture carries the page; the copy sits on its lower edge over the scrim.
+ */
+function banner(): string {
+  const best = latest()
+  const d = best ? state.slots[best - 1] : undefined
+  const act = d?.summary ? currentAct(OPENWORLD_STORY, d.summary.day) : undefined
+  const art = artMarkup(act?.art ?? OPENWORLD_STORY.cover, 'story-hero')
+  const kicker = d
+    ? ['Continue', act ? en(act.label) : undefined].filter(Boolean).map((s) => esc(s!)).join(' · ')
+    : [en(OPENWORLD_WORLD.title), en(OPENWORLD_WORLD.genre)].map(esc).join(' · ')
+  return `<section class="lm-banner" aria-labelledby="lm-featured">
+    ${art}
+    <div class="lm-banner-copy">
+      <p class="lm-eyebrow">${kicker}</p>
+      <h1 class="lm-display" id="lm-featured">${esc(en(OPENWORLD_STORY.title))}</h1>
+      <p class="lm-lede">${esc(en(OPENWORLD_STORY.summary))}</p>
+      ${d
+        ? `<p class="lm-banner-meta">${esc(line(d.summary))} · Slot ${best} · saved ${when(d.savedAt)}</p>
+           <div class="lm-card-acts">
+             <button type="button" class="lm-btn primary" data-resume="${best}">Resume story</button>
+             <button type="button" class="lm-btn ghost" data-go="library">Your stories</button>
+           </div>`
+        : `<p class="lm-banner-meta">Nothing is written yet · three save slots wait on this device</p>
+           <div class="lm-card-acts">
+             <button type="button" class="lm-btn primary" data-new="1">Begin a story</button>
+             <button type="button" class="lm-btn ghost" data-go="discover">Explore the world</button>
+           </div>`}
+    </div>
+  </section>`
+}
+
+/** The saves other than the featured one, or an honest note about the slots that are still empty. */
+function stories(): string {
   const best = latest()
   const others = played().filter((s) => s !== best)
+  const empty = `<div class="lm-empty">
+      <span class="lm-empty-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <div>
+        <h3 class="lm-card-title">${best ? 'Two slots are still open' : 'Your stories will gather here'}</h3>
+        <p class="lm-muted">${best
+          ? 'Each story you begin keeps its own slot. Their progress is read from the game\u2019s own saves, never a second copy.'
+          : 'Three save slots live on this device. Begin a story and its progress appears here, read from the game\u2019s own saves.'}</p>
+      </div>
+    </div>`
+  return `<section class="lm-section" aria-labelledby="lm-stories">
+    <div class="lm-section-head"><h2 class="lm-h2" id="lm-stories">Your stories</h2><button type="button" class="lm-link" data-go="library">See all</button></div>
+    ${others.length ? `<div class="lm-grid">${others.map((s) => slotCard(s, 'plain')).join('')}</div>` : empty}
+  </section>`
+}
+
+/** The one playable world, as a wide band: its picture, its promise, and the way in. */
+function discoverBand(): string {
+  const world = OPENWORLD_WORLD
+  return `<section class="lm-section" aria-labelledby="lm-discover">
+    <div class="lm-section-head"><h2 class="lm-h2" id="lm-discover">Discover</h2><button type="button" class="lm-link" data-go="discover">All worlds</button></div>
+    <article class="lm-band">
+      ${artMarkup(world.cover, 'world-cover')}
+      <div class="lm-band-copy">
+        <p class="lm-kicker">${esc(en(world.genre))}</p>
+        <h3 class="lm-band-title">${esc(en(world.title))}</h3>
+        <p class="lm-lede">${esc(en(world.summary))}</p>
+        <p class="lm-muted">${esc(en(world.setting))} · ${esc(en(world.era))}</p>
+        <div class="lm-card-acts"><button type="button" class="lm-btn primary" data-go="discover">Explore the world</button></div>
+      </div>
+    </article>
+  </section>`
+}
+
+function home(): string {
   return `<main class="lm-main" data-route="home">
-    <section class="lm-hero" aria-labelledby="lm-featured">
-      <p class="lm-eyebrow">Continue</p>
-      <h1 class="lm-h1" id="lm-featured">${best ? 'Your story is waiting' : 'Begin a story'}</h1>
-      ${best ? slotCard(best, 'featured') : `<article class="lm-card featured empty"><div class="lm-card-body"><h3 class="lm-card-title">No story yet</h3><p class="lm-card-meta">Create a traveller and step into the world.</p><div class="lm-card-acts"><button type="button" class="lm-btn primary" data-new="1">Begin a story</button></div></div></article>`}
-    </section>
-    <section class="lm-section" aria-labelledby="lm-stories">
-      <div class="lm-section-head"><h2 class="lm-h2" id="lm-stories">Your stories</h2><button type="button" class="lm-link" data-go="library">See all</button></div>
-      <div class="lm-grid">
-        ${others.length ? others.map((s) => slotCard(s, 'plain')).join('') : `<p class="lm-muted">Other save slots appear here once you start them.</p>`}
-      </div>
-    </section>
-    <section class="lm-section" aria-labelledby="lm-discover">
-      <div class="lm-section-head"><h2 class="lm-h2" id="lm-discover">Discover</h2><button type="button" class="lm-link" data-go="discover">All worlds</button></div>
-      <div class="lm-grid">
-        <article class="lm-card">
-          ${artMarkup(OPENWORLD_WORLD.cover, 'world-cover')}
-          <div class="lm-card-body">
-            <p class="lm-kicker">${esc(en(OPENWORLD_WORLD.genre))}</p>
-            <h3 class="lm-card-title">${esc(en(OPENWORLD_WORLD.title))}</h3>
-            <p class="lm-card-meta">${esc(en(OPENWORLD_WORLD.summary))}</p>
-            <div class="lm-card-acts"><button type="button" class="lm-btn" data-go="discover">Open world</button></div>
-          </div>
-        </article>
-      </div>
-    </section>
+    ${banner()}
+    ${stories()}
+    ${discoverBand()}
   </main>`
 }
 
@@ -255,29 +301,35 @@ function library(): string {
 function discover(): string {
   const world = OPENWORLD_WORLD
   return `<main class="lm-main" data-route="discover">
-    <h1 class="lm-h1">Discover worlds</h1>
-    <p class="lm-lede">A small, curated shelf. More worlds arrive as content packs, not as a marketplace.</p>
-    <article class="lm-world">
-      ${artMarkup(world.cover, 'world-cover')}
-      <div class="lm-world-copy">
-        <h2 class="lm-h2">${esc(en(world.title))}</h2>
+    <header class="lm-pagehead">
+      <p class="lm-eyebrow">A curated shelf</p>
+      <h1 class="lm-h1">Discover worlds</h1>
+      <p class="lm-lede">One world is playable today. More arrive as content packs, not as a marketplace — and only a world with its own pack can be entered.</p>
+    </header>
+    <section class="lm-banner world" aria-labelledby="lm-world">
+      ${artMarkup(world.cover, 'world-hero')}
+      <div class="lm-banner-copy">
+        <p class="lm-eyebrow">${esc(en(world.genre))}</p>
+        <h2 class="lm-display" id="lm-world">${esc(en(world.title))}</h2>
         <p class="lm-lede">${esc(en(world.summary))}</p>
-        <dl class="lm-facts">
-          <div><dt>Setting</dt><dd>${esc(en(world.setting))}</dd></div>
-          <div><dt>Genre</dt><dd>${esc(en(world.genre))}</dd></div>
-          <div><dt>Tone</dt><dd>${esc(en(world.tone))}</dd></div>
-          <div><dt>Era</dt><dd>${esc(en(world.era))}</dd></div>
-          <div><dt>Motifs</dt><dd>${world.motifs.map((m) => esc(m)).join(', ')}</dd></div>
-        </dl>
-        <div class="lm-card-acts"><button type="button" class="lm-btn primary" data-new="1">Play ${esc(en(world.title))}</button></div>
+        <p class="lm-banner-meta">${esc(en(world.setting))} · ${esc(en(world.era))} · ${esc(en(world.tone))}</p>
+        <div class="lm-card-acts">
+          <button type="button" class="lm-btn primary" data-new="1">Begin a story</button>
+          <button type="button" class="lm-btn ghost" data-go="library">Your stories</button>
+        </div>
       </div>
-    </article>
-    <article class="lm-world soon">
-      <div class="lm-world-copy">
-        <h2 class="lm-h2">More worlds</h2>
-        <p class="lm-muted">Announced for later phases. No play action until a world has its own content pack.</p>
-      </div>
-    </article>
+    </section>
+    <section class="lm-panel" aria-labelledby="lm-worldfacts">
+      <h2 class="lm-h2" id="lm-worldfacts">About ${esc(en(world.title))}</h2>
+      <dl class="lm-facts">
+        <div><dt>Setting</dt><dd>${esc(en(world.setting))}</dd></div>
+        <div><dt>Genre</dt><dd>${esc(en(world.genre))}</dd></div>
+        <div><dt>Tone</dt><dd>${esc(en(world.tone))}</dd></div>
+        <div><dt>Era</dt><dd>${esc(en(world.era))}</dd></div>
+      </dl>
+      <ul class="lm-tags" aria-label="Visual motifs">${world.motifs.map((m) => `<li>${esc(m)}</li>`).join('')}</ul>
+    </section>
+    <p class="lm-note">More worlds are announced for later phases. They have no play action until each has its own content pack.</p>
   </main>`
 }
 
@@ -414,9 +466,12 @@ function wire(): void {
   }
   // a picture that fails to load keeps its frame and shows the fallback; a cached failure fires no error event
   root.querySelectorAll<HTMLImageElement>('.lm-art-img').forEach((img) => {
-    const fail = (): void => img.closest('.lm-art')?.classList.add('missing')
+    const art = img.closest('.lm-art')
+    const fail = (): void => art?.classList.add('missing')
+    const done = (): void => art?.classList.add('loaded')
     img.addEventListener('error', fail, { once: true })
-    if (img.complete && img.naturalWidth === 0) fail()
+    img.addEventListener('load', done, { once: true })
+    if (img.complete) (img.naturalWidth === 0 ? fail : done)()
   })
   const consent = root.querySelector<HTMLInputElement>('#lm-consent')
   if (consent) consent.onchange = () => { state.consent = consent.checked; render() }

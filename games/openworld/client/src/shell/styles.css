@@ -24,6 +24,7 @@
   --lm-accent-soft: #f0d79b;
   --lm-danger: #e0725f;
   --lm-radius: 16px;
+  --lm-radius-lg: 22px;
   --lm-radius-sm: 10px;
   --lm-shadow: 0 22px 60px rgba(0, 0, 0, 0.45);
   --lm-gap: 20px;
@@ -135,7 +136,7 @@
 /* ---------------------------------------------------------------- layout */
 
 .lm-main {
-  width: min(1120px, 100%);
+  width: min(1240px, 100%);
   margin: 0 auto;
   padding: clamp(22px, 4vw, 44px) clamp(16px, 4vw, 40px) 72px;
   display: flex;
@@ -161,7 +162,6 @@
   letter-spacing: -0.01em;
   outline: none;
 }
-
 .lm-h2 {
   margin: 0;
   font-family: var(--lm-font-display);
@@ -199,6 +199,150 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.lm-pagehead {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 72ch;
+}
+
+/* ---------------------------------------------------------------- the featured banner */
+
+/* One picture carries the page and the copy sits on its lower edge (src/shell/artwork.ts: the hero slots). The
+   picture sets the height; the copy is a grid partner on the same cell, so it can never push the frame around. */
+.lm-banner {
+  position: relative;
+  display: grid;
+  grid-template-areas: 'hero';
+  border-radius: var(--lm-radius-lg);
+  border: 1px solid var(--lm-line);
+  overflow: hidden;
+  background: var(--lm-surface);
+  box-shadow: var(--lm-shadow);
+}
+
+.lm-banner > .lm-art {
+  grid-area: hero;
+}
+
+.lm-banner-copy {
+  grid-area: hero;
+  align-self: end;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 740px;
+  padding: clamp(20px, 3.6vw, 42px);
+  z-index: 1;
+}
+
+.lm-display {
+  margin: 0;
+  font-family: var(--lm-font-display);
+  font-size: clamp(34px, 5.2vw, 58px);
+  font-weight: 500;
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  text-shadow: 0 2px 24px rgba(6, 8, 16, 0.55);
+}
+
+.lm-banner-copy .lm-lede {
+  color: #dde1f0;
+  line-height: 1.55;
+  max-width: 54ch;
+}
+
+.lm-banner-meta {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--lm-ink-soft);
+}
+
+/* ---------------------------------------------------------------- wide bands */
+
+/* A world, given the width it needs: the picture fills the band's height, the copy sits beside it. */
+.lm-band {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  min-height: 260px;
+  border-radius: var(--lm-radius);
+  border: 1px solid var(--lm-line);
+  overflow: hidden;
+  background: var(--lm-surface);
+}
+
+.lm-band > .lm-art {
+  aspect-ratio: auto;
+  height: 100%;
+  min-height: 220px;
+}
+
+.lm-band-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: clamp(20px, 3vw, 34px);
+}
+
+.lm-band-title {
+  margin: 0;
+  font-family: var(--lm-font-display);
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+/* The empty shelf: an invitation, not a blank grid. */
+.lm-empty {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 22px 24px;
+  border: 1px dashed var(--lm-line);
+  border-radius: var(--lm-radius);
+  background: rgba(18, 21, 36, 0.55);
+}
+
+.lm-empty-mark {
+  display: flex;
+  gap: 5px;
+  flex: none;
+}
+
+.lm-empty-mark i {
+  width: 6px;
+  height: 34px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(240, 215, 155, 0.55), rgba(216, 178, 106, 0.08));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+}
+
+.lm-empty-mark i:nth-child(2) {
+  height: 46px;
+}
+
+.lm-tags {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lm-tags li {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--lm-line);
+  background: var(--lm-surface);
+  color: var(--lm-ink-soft);
+  font-size: 12px;
+  letter-spacing: 0.04em;
 }
 
 .lm-section-head {
@@ -248,7 +392,7 @@
   aspect-ratio: var(--lm-art-aspect, 16 / 9);
   min-height: 112px;
   overflow: hidden;
-  background: #141726;
+  background: #10131f;
 }
 
 .lm-art-img {
@@ -259,6 +403,13 @@
   height: 100%;
   object-fit: cover;
   object-position: var(--lm-art-focus, 50% 50%);
+  /* decoded pictures fade in from the frame's own colour, so a slow file never paints a flash of white */
+  opacity: 0;
+  transition: opacity 320ms ease;
+}
+
+.lm-art.loaded .lm-art-img {
+  opacity: 1;
 }
 
 /* The overlay: the frame darkens toward the edge the copy takes, so text keeps its contrast on any picture. */
@@ -272,6 +423,13 @@
 
 .lm-art[data-overlay='inline-end']::after {
   background: linear-gradient(to right, rgba(11, 13, 23, 0.04) 34%, rgba(11, 13, 23, 0.42) 72%, rgba(11, 13, 23, 0.9));
+}
+
+/* A hero band's scrim: dark along the lower edge for the copy, and toward the left, where the copy starts. */
+.lm-art[data-overlay='hero']::after {
+  background:
+    linear-gradient(to top, rgba(9, 11, 20, 0.95) 0%, rgba(9, 11, 20, 0.72) 26%, rgba(9, 11, 20, 0.18) 58%, rgba(9, 11, 20, 0) 82%),
+    linear-gradient(to right, rgba(9, 11, 20, 0.66) 0%, rgba(9, 11, 20, 0.2) 48%, rgba(9, 11, 20, 0) 74%);
 }
 
 .lm-art[data-overlay='none']::after {
@@ -297,6 +455,17 @@
 .lm-card.compact {
   display: grid;
   grid-template-columns: 116px minmax(0, 1fr);
+}
+
+/* A slot with no save yet: the frame stays, quieter, so the shelf reads as three places rather than a gap. */
+.lm-card.empty {
+  background: var(--lm-bg-soft);
+  border-style: dashed;
+}
+
+.lm-card.empty .lm-art {
+  opacity: 0.45;
+  filter: saturate(0.6);
 }
 
 .lm-card.compact .lm-art {
@@ -699,6 +868,38 @@
     aspect-ratio: var(--lm-art-narrow, var(--lm-art-aspect));
   }
 
+  /* the banner's picture becomes a band and the copy moves below it, where it can wrap freely */
+  .lm-banner {
+    grid-template-areas: 'hero' 'copy';
+  }
+
+  .lm-banner-copy {
+    grid-area: copy;
+    align-self: stretch;
+    max-width: none;
+    background: linear-gradient(180deg, var(--lm-surface), var(--lm-bg-soft));
+    border-top: 1px solid var(--lm-line);
+  }
+
+  .lm-banner-copy .lm-lede {
+    color: var(--lm-ink-soft);
+  }
+
+  .lm-art[data-overlay='hero']::after {
+    background: linear-gradient(to top, rgba(9, 11, 20, 0.72), rgba(9, 11, 20, 0.12) 55%, rgba(9, 11, 20, 0) 78%);
+  }
+
+  .lm-band {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .lm-band > .lm-art {
+    aspect-ratio: 16 / 9;
+    height: auto;
+    min-height: 0;
+  }
+
   .lm-card.compact {
     grid-template-columns: 92px minmax(0, 1fr);
   }
@@ -726,6 +927,21 @@
 
   .lm-card-acts .lm-btn {
     flex: 1 1 100%;
+  }
+
+  .lm-banner {
+    border-radius: var(--lm-radius);
+  }
+
+  .lm-banner-copy {
+    padding: 18px 18px 20px;
+  }
+
+  .lm-empty {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 18px;
   }
 }
 

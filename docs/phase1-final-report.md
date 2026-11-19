@@ -2,6 +2,12 @@
 
 One report for the whole mission, written after Stage 8 and final verification.
 
+> **Update, 2026-11-19 — visual refinement pass.** A later pass refined the shell's Home and Discover composition
+> and closed the creator-handoff and Playwright gaps recorded below: the recommendation was observed in the existing
+> pixel creator, and `npx playwright test` ran (21 of 26 passed; the five game-boot specs time out on this host). The
+> commands run, their results and the screenshots are in the last section, "Visual refinement and verification pass —
+> 2026-11-19". The phase stays **PARTIAL**.
+
 **Final status: PARTIAL.** Phase 1 is implemented and the regression core is green, but two acceptance categories were not re-demonstrated end-to-end this session: the live Playwright UI suite (`npm run test:ui`) and the full new-game two-step through the shell into the existing pixel creator (the create screen's "Continue to the character creator" button was not pressed this session). They remain pre-existing verified flows / configuration, not new failures. No mandatory acceptance criterion is blocked by something introduced in this session; the remaining gaps are either not runnable without a world + browsers, or were intentionally left as pre-existing verified flows rather than re-clicked.
 
 ---
@@ -278,4 +284,93 @@ npx vitest run games/openworld/client/test/shell.test.ts
 cd games/openworld/client && npx vite --port 5199   # then open /shell.html
 ```
 
-The shell's contract lives in `games/openworld/client/src/shell/contracts.ts`; the game-side seam is `packages/runtime/src/shellHandoff.ts` plus `startSlot`/`CoverOptions` in `packages/runtime/src/{main,ui/cover}.ts`. The only change made this session is the one-line boundary-rule extension in `packages/engine/test/boundaries.test.ts`, committed as `ae770f24`.
+The shell's contract lives in `games/openworld/client/src/shell/contracts.ts`; the game-side seam is
+`packages/runtime/src/shellHandoff.ts` plus `startSlot`/`CoverOptions` in `packages/runtime/src/{main,ui/cover}.ts`. The only change made in that session was the one-line boundary-rule extension in `packages/engine/test/boundaries.test.ts`, committed as `ae770f24`.
+
+---
+
+## Visual refinement and verification pass — 2026-11-19
+
+Baseline: `master` at `2253ca47`, pushed to `origin`. The pass changed only how the application shell presents Home and
+Discover, plus the evidence for the checks the previous pass left open. The engine, the game page, `cover.ts`, the pixel
+creator, the saves and the Android entry configuration are untouched.
+
+### Files changed
+
+- `games/openworld/client/src/shell/artwork.ts` — `story-hero` and `world-hero` slots (21 / 9 wide, 16 / 9 stacked,
+  overlay `hero`); `ArtworkKind` and the overlay union extended. No artwork was generated or imported: both existing covers
+  are reused at their recorded focal points.
+- `games/openworld/client/src/shell/app.ts` — `banner()` (featured save *or* first-run invitation), `stories()` (other
+  played slots, or an honest note about open slots), `discoverBand()` (the world at full width on Home), a rebuilt
+  `discover()` (hero, About panel, motifs), `slotCard()` trimmed to its two remaining variants, and image `loaded` /
+  `missing` handling for both cached and fresh pictures.
+- `games/openworld/client/src/shell/styles.css` — the banner (picture and copy share a grid cell), display type, hero
+  scrim, wide band, empty-slot note, motif tags, picture fade, the ≤860px reflow (copy below the picture) and the page
+  column at 1240px.
+- `docs/phase1/refined-2026-11-19-*.png` — 44 screenshots: first-run and saved states × Home, Library, Discover and
+  Settings × 1920×1080, 1366×768, 768×1024, 390×844, 360×800, plus create, creator, journey and game.
+- `docs/phase1/refined-report.json` — the measured sweep (40 state/route/viewport checks).
+- `docs/phase1-execution-log.md`, this report.
+
+### Visual decisions
+
+1. The featured story's picture is the page's ground; the copy sits on its lower edge over a scrim that reaches 0.95 at
+   that edge, so the title and its one action read on any part of any picture.
+2. Below 860px the picture becomes a 16 / 9 band and the copy moves onto the panel's own surface: no title has to fit
+   inside a portrait crop, and nothing is clipped or overlapped at 390 or 360 px.
+3. One cover per page: Home's hero uses the story cover in both states (the story on offer or resumed); Home's Discover
+   band and the Discover hero use the world cover.
+4. The empty state is an invitation — the story's own title and summary, a primary Begin a story and a secondary way into
+   the world — with no invented save, slot or progress. "Your stories" says plainly that three slots exist and that the
+   progress comes from the game's own saves.
+5. Discover gives the one playable world a hero, an About panel and a motifs row; later worlds stay a note with no play
+   action. Nothing is stretched to fill space.
+
+### Checks run, with results
+
+| Command | Result |
+| --- | --- |
+| `npm run gen:world` | exit 0 (the world on disk predated the content; before this the game page hung at "Loading…") |
+| `npx tsc -p games/openworld/client --noEmit` | exit 0 |
+| `npx vitest run games/openworld/client/test/shell.test.ts` | 6/6 passed |
+| `npx vitest run packages/engine/test/boundaries.test.ts` | 1 failed: the AI-boundary walk hit the default 30s timeout (33.9s on this host), no assertion failure |
+| `npx vitest run packages/engine/test/boundaries.test.ts --testTimeout=180000` | 6/6 passed |
+| `npm run build -w @openworld-game/client` | exit 0, 53s; `dist/shell.html` rebuilt |
+| `npm run typecheck` | started in the background; **did not finish** in this session (whole-workspace `tsc` on this host), so it is not reported as passing |
+| `npx playwright test` | **21 passed, 5 failed** of 26; every failure is `waitForFunction(lsw.frame.player)` — the game page did not reach a player within the spec's 90–240s. Component, font and layout specs all pass |
+| `npx playwright test tests/ui/game.spec.ts --workers=1` | first spec still failed after 4.0m: the cause is the host's dev-server speed (~23s per HTML request), not contention |
+| `npx cap sync android` | exit 0; `android/app/src/main/assets/capacitor.config.json` regenerated with `server.appStartPath: "shell.html"` |
+| `JAVA_HOME=<JDK 21> ./gradlew assembleDebug --no-daemon` | **BUILD SUCCESSFUL**, 3m47s → `android/app/build/outputs/apk/debug/app-debug.apk` (the machine's default `JAVA_HOME` is JDK 17, which cannot compile Capacitor's `sourceCompatibility 21`) |
+
+Browser sweep: 40 state/route/viewport checks, all with no horizontal overflow, no clipped text, no control under 40px
+and no element outside the viewport; every picture decoded (`naturalWidth > 0`, frame not `missing`).
+
+End-to-end through the real controls: the shell's offline recommendation ("a woman, cropped silver hair, bright amber
+eyes, a scar across the cheek, a teal oilcloth coat, dark brown ankle boots") **matched the existing pixel creator's own
+sentence exactly**; one step there changed it to "silver hair swept back" while the other fields stayed; Next reached the
+journey step; Begin adventure started the game and the game wrote its own slot; the shell then showed
+"Continue · Act I — The First Seal", "Cloudtop · day 1 13:00 · Lv 1 · Slot 1 · saved Nov 19" and Resume story. The only
+console error in the whole run is `ERR_CONNECTION_REFUSED` for `localhost:8787/health`, the modder probe of a service that
+is not running on this machine.
+
+### Acceptance, updated
+
+| # | Criterion | Status after this pass |
+| --- | --- | --- |
+| 5 | Resume restarts through the existing start contract | **Demonstrated**: the slot the game wrote was read back by the shell and its Resume button is rendered against that slot |
+| 7 | New game still reaches the existing two-step flow and creator | **Demonstrated**: create → existing pixel creator → journey step → Begin adventure → game running → slot written |
+| 8 | A recommendation is rendered by the existing creator | **Demonstrated**: the creator's own sentence matched the recommendation exactly, and an edit there changed only the edited field |
+| 12 | Android packages the same web build | **Build verified**: `cap sync` + `assembleDebug` produced an APK containing the same `dist` (with `shell.html`); not installed or run |
+| — | Playwright UI suite | **Run, not green**: 21/26; the five game-boot specs time out on this host |
+
+### Remaining limitations
+
+1. `npm run typecheck` (whole workspace) was not completed here; only the client project is confirmed by `tsc`.
+2. Five Playwright specs (`game.spec.ts` ×3, `creator.spec.ts` ×2) time out waiting for the game page to reach a player;
+they could not be shown passing on this machine. Nothing changed in this pass touches the game page or those specs.
+3. The Android APK was built but never installed or played; no device or emulator was used, so nothing here is physical
+Android verification.
+4. No live model recommendation was run (no service connected); the offline rule set was used.
+5. `act_cover` remains a contract with no artwork; cards fall back to the story cover.
+6. Phase 1 stays **PARTIAL**: the shell and its handoffs are demonstrated, the UI suite is not green, and no Android
+runtime check exists.
