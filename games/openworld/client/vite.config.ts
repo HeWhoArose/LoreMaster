@@ -7,5 +7,10 @@ export default defineConfig({
   publicDir: '../public',
   worker: { format: 'es' },
   build: { target: 'es2022', chunkSizeWarningLimit: 4000, rollupOptions: { input: { game: 'index.html', bosses: 'boss-gallery.html', looks: 'looks.html', shell: 'shell.html' } } },
-  server: { port: 5173 },
+  server: {
+    port: 5173,
+    // Bind to all interfaces so container port forwarding (Docker, WSL2, devbox) can reach the server.
+    // The Playwright webServer in playwright.config.ts still targets 127.0.0.1 for local desktop tests.
+    host: true,
+  },
 })

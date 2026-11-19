@@ -238,18 +238,73 @@
   box-shadow: var(--lm-shadow);
 }
 
-.lm-card-art {
+/* ---------------------------------------------------------------- artwork */
+
+/* One picture component for every slot (src/shell/artwork.ts): the frame is set per kind, the image fills it, and
+   the fallback underneath is what shows while the picture loads, when none is authored, or when it fails. */
+.lm-art {
   position: relative;
-  min-height: 148px;
-  background: linear-gradient(150deg, #26304f, #141726 70%);
-  background-size: cover;
-  background-position: center;
-  display: grid;
-  place-items: center;
+  flex: none;
+  aspect-ratio: var(--lm-art-aspect, 16 / 9);
+  min-height: 112px;
+  overflow: hidden;
+  background: #141726;
 }
 
-.lm-card-art.with-art {
-  background-color: #141726;
+.lm-art-img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: var(--lm-art-focus, 50% 50%);
+}
+
+/* The overlay: the frame darkens toward the edge the copy takes, so text keeps its contrast on any picture. */
+.lm-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(11, 13, 23, 0.88), rgba(11, 13, 23, 0.16) 46%, rgba(11, 13, 23, 0) 74%);
+}
+
+.lm-art[data-overlay='inline-end']::after {
+  background: linear-gradient(to right, rgba(11, 13, 23, 0.04) 34%, rgba(11, 13, 23, 0.42) 72%, rgba(11, 13, 23, 0.9));
+}
+
+.lm-art[data-overlay='none']::after {
+  content: none;
+}
+
+.lm-art-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(120% 90% at 28% 18%, rgba(94, 116, 196, 0.34), transparent 62%),
+    radial-gradient(90% 80% at 78% 92%, rgba(216, 178, 106, 0.18), transparent 60%),
+    linear-gradient(150deg, #26304f, #141726 72%);
+}
+
+.lm-art:not(.missing) .lm-art-fallback {
+  display: none;
+}
+
+/* The library's compact row: a small square thumbnail beside the save's line. */
+.lm-card.compact {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+}
+
+.lm-card.compact .lm-art {
+  /* the thumbnail keeps its slot's square frame and centres beside the save's line */
+  aspect-ratio: 1 / 1;
+  height: auto;
+  min-height: 0;
+  align-self: center;
 }
 
 .lm-card-glyph {
@@ -260,9 +315,6 @@
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
 }
 
-.lm-card.featured .lm-card-art {
-  min-height: 240px;
-}
 
 .lm-card-body {
   padding: 18px 20px 20px;
@@ -509,12 +561,6 @@
   background: var(--lm-bg-soft);
 }
 
-.lm-world-art {
-  min-height: 240px;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(160deg, #2a3352, #12151f 75%);
-}
 
 .lm-world-copy {
   padding: clamp(18px, 3vw, 30px);
@@ -648,9 +694,13 @@
     grid-template-columns: 1fr;
   }
 
-  .lm-card.featured .lm-card-art,
-  .lm-world-art {
-    min-height: 168px;
+  /* stacked cards take the full width, so each picture widens to its slot's narrow frame */
+  .lm-art {
+    aspect-ratio: var(--lm-art-narrow, var(--lm-art-aspect));
+  }
+
+  .lm-card.compact {
+    grid-template-columns: 92px minmax(0, 1fr);
   }
 }
 

@@ -3,6 +3,7 @@
 // renders. These are application-level records. No engine entity is added, and nothing here writes to a save.
 
 import type { Text } from '@openworld/engine'
+import type { ArtworkRef } from './artwork.ts'
 
 /** An act of a story: an ordered label the shell shows for a save's progress. */
 export interface ActInfo {
@@ -14,6 +15,11 @@ export interface ActInfo {
    * content names them.
    */
   fromDay: number
+  /**
+   * The act's own illustration, when one is authored. Until it is, the story's cover (or the shell's fallback)
+   * carries a save in this act, so the card never shows a broken picture.
+   */
+  art?: ArtworkRef
 }
 
 export interface StoryMeta {
@@ -22,7 +28,7 @@ export interface StoryMeta {
   worldId: string
   summary: Text
   /** Artwork asset, when one is authored; the shell falls back to its own treatment. */
-  cover?: string
+  cover?: ArtworkRef
   acts: ActInfo[]
 }
 
@@ -35,7 +41,7 @@ export interface WorldIdentity {
   tone: Text
   era: Text
   motifs: string[]
-  cover?: string
+  cover?: ArtworkRef
   /** False: shown in Discover as announced, with no play action. */
   playable: boolean
 }
@@ -107,6 +113,25 @@ export const SPECIES_PROFILES: SpeciesProfile[] = [
   },
 ]
 
+/**
+ * The shell's own illustrations. Both were generated for this project with Freebuff's image generator from prompts
+ * written from the world's own motifs (river fog, lanterns, seals, a broken seal); no external or franchise artwork
+ * was imported. They are cinematic paintings, deliberately not the game's pixel art.
+ */
+export const OPENWORLD_WORLD_COVER: ArtworkRef = {
+  src: './assets/shell/world-openworld.jpg',
+  credit: 'Generated for this project (Freebuff image generator)',
+  license: 'Original project asset; no external rights holder',
+  focal: [50, 55],
+}
+
+export const OPENWORLD_STORY_COVER: ArtworkRef = {
+  src: './assets/shell/story-five-seals.jpg',
+  credit: 'Generated for this project (Freebuff image generator)',
+  license: 'Original project asset; no external rights holder',
+  focal: [50, 50],
+}
+
 export const OPENWORLD_WORLD: WorldIdentity = {
   worldId: 'world',
   title: { en: 'OpenWorld', zh: '开放世界' },
@@ -119,6 +144,7 @@ export const OPENWORLD_WORLD: WorldIdentity = {
   tone: { en: 'Warm at the edges, dark at the centre', zh: '边缘温暖，中心幽暗' },
   era: { en: 'Late medieval, low magic', zh: '中世纪末，低魔' },
   motifs: ['lanterns', 'seals', 'river fog', 'ink and paper'],
+  cover: OPENWORLD_WORLD_COVER,
   playable: true,
 }
 
@@ -130,6 +156,7 @@ export const OPENWORLD_STORY: StoryMeta = {
     en: 'The night the first seal breaks, and the road that carries you through the other four.',
     zh: '第一印破碎的那一夜，以及带你走过其余四印的那条路。',
   },
+  cover: OPENWORLD_STORY_COVER,
   acts: [
     { actId: 'act-1', label: { en: 'Act I — The First Seal', zh: '第一幕 · 第一印' }, fromDay: 1 },
     { actId: 'act-2', label: { en: 'Act II — The Second Seal', zh: '第二幕 · 第二印' }, fromDay: 2 },

@@ -9,6 +9,7 @@ import { listSlots, type Slot, type SlotData } from '@openworld/runtime/src/save
 import { setShellHandoff } from '@openworld/runtime/src/shellHandoff.ts'
 import type { SaveSummary } from '@openworld/runtime/src/protocol.ts'
 import { ACT_COVER, OPENWORLD_STORY, OPENWORLD_WORLD, SPECIES_PROFILES, currentAct } from './contracts.ts'
+import { ARTWORK_SLOTS, artMarkup } from './artwork.ts'
 import { LOCAL_RECOMMENDER, lookFrom, modelRecommender, type Recommender } from './recommend.ts'
 
 type Route = 'opening' | 'home' | 'library' | 'discover' | 'create' | 'settings'
@@ -181,12 +182,18 @@ function opening(): string {
   </div>`
 }
 
-function slotCard(slot: Slot, featured: boolean): string {
+/**
+ * One save's card. Its picture is the act's own illustration when that act has one, otherwise the story's cover;
+ * a ``thumb'' shows the same picture in the library's small square frame.
+ */
+function slotCard(slot: Slot, variant: 'featured' | 'plain' | 'thumb'): string {
   const d = state.slots[slot - 1]
   const act = d?.summary ? currentAct(OPENWORLD_STORY, d.summary.day) : undefined
-  const art = OPENWORLD_STORY.cover ? ` style="background-image:url('${esc(OPENWORLD_STORY.cover)}')"` : ''
-  return `<article class="lm-card${featured ? ' featured' : ''}${d ? '' : ' empty'}" data-slot="${slot}">
-    <div class="lm-card-art${art ? ' with-art' : ''}"${art} aria-hidden="true"><span class="lm-card-glyph"></span></div>
+  const art = act?.art
+    ? artMarkup(act.art, 'act-cover')
+    : artMarkup(OPENWORLD_STORY.cover, variant === 'thumb' ? 'library-thumb' : 'story-cover')
+  return `<article class="lm-card${variant === 'featured' ? ' featured' : ''}${variant === 'thumb' ? ' compact' : ''}${d ? '' : ' empty'}" data-slot="${slot}">
+    ${art}
     <div class="lm-card-body">
       <p class="lm-kicker">${esc(en(OPENWORLD_STORY.title))}${act ? ` · ${esc(en(act.label))}` : ''}</p>
       <h3 class="lm-card-title">${d ? esc(line(d.summary)) : 'A fresh story'}</h3>
@@ -207,18 +214,19 @@ function home(): string {
     <section class="lm-hero" aria-labelledby="lm-featured">
       <p class="lm-eyebrow">Continue</p>
       <h1 class="lm-h1" id="lm-featured">${best ? 'Your story is waiting' : 'Begin a story'}</h1>
-      ${best ? slotCard(best, true) : `<article class="lm-card featured empty"><div class="lm-card-body"><h3 class="lm-card-title">No story yet</h3><p class="lm-card-meta">Create a traveller and step into the world.</p><div class="lm-card-acts"><button type="button" class="lm-btn primary" data-new="1">Begin a story</button></div></div></article>`}
+      ${best ? slotCard(best, 'featured') : `<article class="lm-card featured empty"><div class="lm-card-body"><h3 class="lm-card-title">No story yet</h3><p class="lm-card-meta">Create a traveller and step into the world.</p><div class="lm-card-acts"><button type="button" class="lm-btn primary" data-new="1">Begin a story</button></div></div></article>`}
     </section>
     <section class="lm-section" aria-labelledby="lm-stories">
       <div class="lm-section-head"><h2 class="lm-h2" id="lm-stories">Your stories</h2><button type="button" class="lm-link" data-go="library">See all</button></div>
       <div class="lm-grid">
-        ${others.length ? others.map((s) => slotCard(s, false)).join('') : `<p class="lm-muted">Other save slots appear here once you start them.</p>`}
+        ${others.length ? others.map((s) => slotCard(s, 'plain')).join('') : `<p class="lm-muted">Other save slots appear here once you start them.</p>`}
       </div>
     </section>
     <section class="lm-section" aria-labelledby="lm-discover">
       <div class="lm-section-head"><h2 class="lm-h2" id="lm-discover">Discover</h2><button type="button" class="lm-link" data-go="discover">All worlds</button></div>
       <div class="lm-grid">
         <article class="lm-card">
+          ${artMarkup(OPENWORLD_WORLD.cover, 'world-cover')}
           <div class="lm-card-body">
             <p class="lm-kicker">${esc(en(OPENWORLD_WORLD.genre))}</p>
             <h3 class="lm-card-title">${esc(en(OPENWORLD_WORLD.title))}</h3>
@@ -235,7 +243,7 @@ function library(): string {
   return `<main class="lm-main" data-route="library">
     <h1 class="lm-h1">Library</h1>
     <p class="lm-lede">Your stories, read from the game's own save slots.</p>
-    <div class="lm-list">${([1, 2, 3] as const).map((s) => slotCard(s, false)).join('')}</div>
+    <div class="lm-list">${([1, 2, 3] as const).map((s) => slotCard(s, 'thumb')).join('')}</div>
     <section class="lm-panel" aria-labelledby="lm-slotmgmt">
       <h2 class="lm-h2" id="lm-slotmgmt">Save files</h2>
       <p class="lm-muted">Exporting, importing and deleting a slot stay in the game's title screen, where the save files already live.</p>
@@ -250,7 +258,7 @@ function discover(): string {
     <h1 class="lm-h1">Discover worlds</h1>
     <p class="lm-lede">A small, curated shelf. More worlds arrive as content packs, not as a marketplace.</p>
     <article class="lm-world">
-      <div class="lm-world-art" aria-hidden="true"><span class="lm-card-glyph"></span></div>
+      ${artMarkup(world.cover, 'world-cover')}
       <div class="lm-world-copy">
         <h2 class="lm-h2">${esc(en(world.title))}</h2>
         <p class="lm-lede">${esc(en(world.summary))}</p>
@@ -334,8 +342,11 @@ function settings(): string {
       <button type="button" class="lm-btn" data-title="1">Open the game's title screen</button>
     </section>
     <section class="lm-panel" aria-labelledby="lm-art">
-      <h2 class="lm-h2" id="lm-art">Act artwork</h2>
-      <p class="lm-muted">Act covers use the <code>${esc(ACT_COVER.id)}</code> slot: ${esc(ACT_COVER.aspect)}, ${esc(ACT_COVER.fit)}, safe margin ${Math.round(ACT_COVER.safeMargin * 100)}%.</p>
+      <h2 class="lm-h2" id="lm-art">Artwork slots</h2>
+      <ul class="lm-pins">
+        ${Object.values(ARTWORK_SLOTS).map((s) => `<li><span>${esc(s.kind)}</span><b>${esc(s.aspect)} · ${esc(s.narrowAspect)}</b></li>`).join('')}
+      </ul>
+      <p class="lm-muted">Act illustrations use the <code>${esc(ACT_COVER.id)}</code> slot: ${esc(ACT_COVER.aspect)}, ${esc(ACT_COVER.fit)}, safe margin ${Math.round(ACT_COVER.safeMargin * 100)}%. Until an act has its own picture, its card shows the story cover, then the shell's fallback.</p>
     </section>
   </main>`
 }
@@ -401,6 +412,12 @@ function wire(): void {
       if (button) button.disabled = (!hasModel && !state.consent) || !state.description.trim()
     }
   }
+  // a picture that fails to load keeps its frame and shows the fallback; a cached failure fires no error event
+  root.querySelectorAll<HTMLImageElement>('.lm-art-img').forEach((img) => {
+    const fail = (): void => img.closest('.lm-art')?.classList.add('missing')
+    img.addEventListener('error', fail, { once: true })
+    if (img.complete && img.naturalWidth === 0) fail()
+  })
   const consent = root.querySelector<HTMLInputElement>('#lm-consent')
   if (consent) consent.onchange = () => { state.consent = consent.checked; render() }
   const button = root.querySelector<HTMLButtonElement>('#lm-recommend')

@@ -1,0 +1,6 @@
+{
+  "script": "dev:shell",
+  "url": "http://localhost:5173/shell.html",
+  "readyPattern": "Local:",
+  "readyTimeout": 30000
+}
