@@ -53,7 +53,7 @@ jobs so a slow check does not wait behind another.
 | --- | --- | --- | --- |
 | `typecheck` | `npm ci` then `npm run typecheck` | all 16 tsconfig projects compile, boundaries included | 30 min |
 | `test` | `npm test -- --testTimeout=120000` | the whole vitest suite, including the Docker-driven `games/openworld/ai/test/repo.test.ts` (a GitHub-hosted Ubuntu runner has Docker) | 45 min |
-| `build` | `npm run build` then `ls` the pages | `gen:world` and the client's vite build produce `dist/index.html`, `shell.html`, `bosses.html`, `looks.html` | 30 min |
+| `build` | `npm run build` then `ls` the pages | `gen:world` and the client's vite build produce `dist/index.html`, `shell.html`, `boss-gallery.html`, `looks.html` | 30 min |
 | `ui` | `npx playwright test --workers=2` | the 26 Playwright specs, at their own budgets (`UI_BUDGET` unset) | 60 min |
 
 Every job installs with `npm ci --no-audit --no-fund` from `package-lock.json` (lockfileVersion 3) and `setup-node`
