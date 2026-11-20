@@ -379,7 +379,7 @@ only the shell's presentation.
 | `npm run build -w @openworld-game/client` | exit 0 — built in 53s; `dist/shell.html` rebuilt |
 | `npm run typecheck` | run in the background; did not finish within this session (see the report's limitations) |
 | `npx playwright test` | 26 tests: **21 passed, 5 failed**; all five failed at `waitForFunction(lsw.frame.player)` (the game page never reached a player within the spec's 90–240s) |
-| `npx playwright test tests/ui/game.spec.ts --workers=1` | retried alone: the first spec still failed after 4.0m — the cause is the host's dev-server speed, not worker contention |
+| `npx playwright test tests/ui/game.spec.ts --workers=1` | retried alone: the first spec still failed after 4.0m. **The cause given at the time — dev-server speed — was wrong**; see *Correction* below |
 | `npx cap sync android` | exit 0 — synced `dist` (with `shell.html`) and rewrote `android/app/src/main/assets/capacitor.config.json` |
 | `JAVA_HOME=<JDK 21> ./gradlew assembleDebug --no-daemon` | **BUILD SUCCESSFUL in 3m47s** — `android/app/build/outputs/apk/debug/app-debug.apk`. The default `JAVA_HOME` here is JDK 17, which cannot compile Capacitor's `sourceCompatibility 21`; the build used the installed JDK 21 (`C:\Program Files\Eclipse Adoptium\jdk-21.0.13.9-hotspot`) |
 
@@ -398,9 +398,40 @@ the modder probe of a local service that is not running.
 
 ### Not demonstrated
 
-- The five Playwright specs that boot the real game page. Their waits time out because this host's Vite dev server needs
-  ~23s per HTML request and the game page loads hundreds of modules; the shell specs, the component specs and the font
-  specs all pass. Nothing in this pass touches the game page, `cover.ts`, the creator or `ui-lab.html`.
+- The five Playwright specs that boot the real game page, at the time of this pass. **The stated cause (dev-server speed,
+  ~23s per HTML request) was wrong** and has been corrected — see *Correction* below and `docs/verification.md`. The shell,
+  component and font specs all pass.
+
+### Correction (follow-up, 2026-11-19)
+
+The five failures were chased down and none of them was the dev server:
+
+- The production build (`vite preview`) and a headed Chromium are exactly as slow as the dev server, and no request on the
+  way to the game is slow (the longest module transform is ~650 ms). The time is the game's own boot: the title hides its
+  menu until the worker has built the world and drawn the frame behind it (`packages/runtime/src/ui/cover.ts`, `BOOT_MS =
+  60_000`). Here that is 33–67 s to a usable menu and 55–65 s to a player; the specs budget 60/90/120/240 s.
+- **A real defect:** the floating Story button (`z-index: 40`, fixed bottom-right) sat over the character creator's Next
+  button. At 360×640 `document.elementFromPoint` at the centre of `#cvNext` returned `BUTTON.narr-btn`, so the click was
+  refused until the test's budget expired. The button is now hidden over the title (`#app.on-cover ~ .narr-btn`) and sits
+  below the game's windows (z-index 39).
+- **A real defect:** the bag's ten-to-a-row grid kept a 36 px floor per slot, so its row was 438 px inside a 314 px
+  column and the inventory body held 456 px of content in 350 px at 390×844. Under 799 px the grid takes its width from
+  the column (`packages/runtime/src/ui/inventory.css`); the desktop layout is unchanged. The Story button also floated
+  over an open window's footer and now sits below the windows (z-index 39).
+- **Test-side:** `waitForFunction` polled on `requestAnimationFrame`; a page Chromium considers hidden throttles rAF, so the
+  gate on `lsw.frame.player` could never evaluate even though the game was running (the failure snapshot showed the HUD).
+  It now polls on a 250 ms timer. Two browsers in parallel on this one machine also starve each other, so `UI_WORKERS`
+  scales the worker count (the verification runner uses 1).
+- **Test-side:** the budgets are now explicit and scalable without touching an assertion (`tests/ui/budget.ts`,
+  `UI_BUDGET`).
+- **Test-side (2026-11-20):** Playwright's `trace: 'retain-on-failure'` records a screencast of every rendered frame,
+  which cost more than the game on this canvas-heavy page: `game.spec.ts:16` needed 12.0 min and exhausted its budget
+  with tracing on, and 3.5 min with `--trace off` on the same host. That was the last unexplained failure in the suite;
+  tracing is now off unless `UI_TRACE=1` (`playwright.config.ts`, `docs/verification.md`).
+- With those fixes, and `UI_BUDGET=3 UI_WORKERS=1` for this host's boot and protocol latency, **the full UI suite is
+  green: 26 passed in 17.2 min, exit 0** (2026-11-20, `verify-logs/ui-full3.log`), and again at **26 passed in 14.5 min,
+  exit 0** on a quiet machine (`verify-logs/ui-final.log`). The five failing specs listed under
+  *Not demonstrated* above now pass; Android at runtime is still a device test.
 - A live model recommendation (no service was connected; only the offline rule set was exercised).
 - Installation or play of the built APK on a device or emulator. The APK exists; it was not run.
 - Act illustrations: the `act_cover` contract still has no artwork, so cards fall back to the story cover.

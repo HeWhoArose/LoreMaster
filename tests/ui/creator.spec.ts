@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { budget } from './budget'
 
 async function fits(page: Page): Promise<void> {
   const bounds = await page.locator('.cv-new').evaluate((surface) => {
@@ -22,7 +23,7 @@ async function fits(page: Page): Promise<void> {
 for (const lang of ['zh', 'en']) {
   test(`${lang}: character creation preserves choices through pages and responsive layouts`, async ({ page }) => {
     // Both pages and all categories in six sizes, with the real world rendering behind them.
-    test.setTimeout(240_000)
+    test.setTimeout(budget(240_000))
     const errors: string[] = []
     page.on('pageerror', (error) => errors.push(error.message))
     await page.addInitScript(() => {

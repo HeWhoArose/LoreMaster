@@ -182,4 +182,7 @@
   #menuSheet[data-tab='inventory'] :is(.cs, .cs-sheet, .inv-side) { grid-row: auto; grid-column: auto; max-height: none; }
   #menuSheet[data-tab='inventory'] .cs-stage { min-height: 260px; }
   #menuSheet[data-tab='inventory'] .inv-well { overflow: visible; }
+  /* Ten to a row is the column's width: the 36px floor is wider than the column at 390px, and the row then overflowed
+     the window's body (438px of slots in a 314px column). The formula already fits the width; it just needs no floor. */
+  #menuSheet[data-tab='inventory'] .inv-side > * { --pack-slot: clamp(16px, calc((100cqw - 24px - 9 * var(--inv-gap)) / 10), 60px); }
 }

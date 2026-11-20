@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { budget } from './budget'
 
 type DevGame = { lsw: { frame?: { player: unknown }; menu: { close():void; open(tab:string):void; openPanel(key:string,by?:string):boolean; toggleQuests():void; openJournal():void; toggleSkillPanel():void; toggleSkills():void; toggleMap():void } } }
 async function start(page:Page):Promise<void> {
@@ -7,11 +8,13 @@ async function start(page:Page):Promise<void> {
   await page.locator('[data-item=new]').click()
   await page.locator('#cvNext').click()
   await page.locator('[data-act=new]').first().click()
-  await page.waitForFunction(()=>!!(window as unknown as DevGame).lsw?.frame?.player)
+  // Poll on a timer, not on requestAnimationFrame: a page Chromium considers hidden (parallel workers, an occluded
+  // window) throttles rAF, and a raf-polled wait then never evaluates even though the game is running.
+  await page.waitForFunction(()=>!!(window as unknown as DevGame).lsw?.frame?.player,undefined,{polling:250})
 }
 
 test('real game windows, navigation and HUD fit desktop, narrow and short viewports',async({page})=>{
-  test.setTimeout(120_000)
+  test.setTimeout(budget(120_000))
   const errors:string[]=[]
   page.on('pageerror',error=>errors.push(error.message))
   await start(page)
@@ -29,7 +32,11 @@ test('real game windows, navigation and HUD fit desktop, narrow and short viewpo
         else menu.toggleMap()
       },name)
       await page.waitForTimeout(150)
-      const active=page.locator('.overlay:not(.hidden) .ui-window,.ui-canvas-window:not(.hidden)').first()
+      // One window at a time: the previous one fades out, so waiting for the count to settle to one keeps `.first()`
+      // from binding to a window that is already on its way out (its disappearance then hangs every later query).
+      const windows=page.locator('.overlay:not(.hidden) .ui-window,.ui-canvas-window:not(.hidden)')
+      await expect(windows).toHaveCount(1)
+      const active=windows.first()
       await expect(active).toBeVisible()
       const box=await active.boundingBox()
       expect(box!.x).toBeGreaterThanOrEqual(0)
@@ -44,7 +51,7 @@ test('real game windows, navigation and HUD fit desktop, narrow and short viewpo
       }
       if(name==='skills'||name==='map') await expect(page.locator(name==='skills'?'#skClose':'#wmClose')).toBeInViewport()
       await page.keyboard.press('Escape')
-      await expect(active).toBeHidden()
+      await expect(windows).toHaveCount(0)
     }
     const bounds=await page.locator('#minimap,#clockbox,#corner,#hotbar').evaluateAll(nodes=>nodes.map(n=>{const b=n.getBoundingClientRect();return{x:b.x,y:b.y,right:b.right,bottom:b.bottom}}))
     for(const rect of bounds){expect(rect.x).toBeGreaterThanOrEqual(-1);expect(rect.right).toBeLessThanOrEqual(width+1);expect(rect.y).toBeGreaterThanOrEqual(0);expect(rect.bottom).toBeLessThanOrEqual(height+1)}
@@ -53,6 +60,7 @@ test('real game windows, navigation and HUD fit desktop, narrow and short viewpo
 })
 
 test('title settings preserve the close button and text inputs across resize',async({page})=>{
+  test.setTimeout(budget(60_000))
   await page.addInitScript(()=>localStorage.setItem('lsw.model.skip','1'))
   await page.goto('/?lang=zh&modder=off')
   await page.locator('[data-item=settings]').click()
@@ -67,7 +75,7 @@ test('title settings preserve the close button and text inputs across resize',as
 })
 
 test('game-owned companion and homestead panels reflow within their content container',async({page})=>{
-  test.setTimeout(90_000)
+  test.setTimeout(budget(90_000))
   const errors:string[]=[]
   page.on('pageerror',error=>errors.push(error.message))
   await start(page)

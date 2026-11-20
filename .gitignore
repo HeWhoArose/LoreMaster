@@ -10,6 +10,7 @@ games/openworld/public/bundle.json
 /var/
 /test-results/
 /playwright-report/
+/verify-logs/
 .env
 games/openworld/wiki/out/
 games/openworld/wiki/out.tmp/

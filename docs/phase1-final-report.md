@@ -338,7 +338,7 @@ creator, the saves and the Android entry configuration are untouched.
 | `npm run build -w @openworld-game/client` | exit 0, 53s; `dist/shell.html` rebuilt |
 | `npm run typecheck` | started in the background; **did not finish** in this session (whole-workspace `tsc` on this host), so it is not reported as passing |
 | `npx playwright test` | **21 passed, 5 failed** of 26; every failure is `waitForFunction(lsw.frame.player)` — the game page did not reach a player within the spec's 90–240s. Component, font and layout specs all pass |
-| `npx playwright test tests/ui/game.spec.ts --workers=1` | first spec still failed after 4.0m: the cause is the host's dev-server speed (~23s per HTML request), not contention |
+| `npx playwright test tests/ui/game.spec.ts --workers=1` | first spec still failed after 4.0m. That run's explanation — the host's dev-server speed — was wrong; the cause was the game's own boot plus two real UI defects, corrected in the follow-up (`docs/verification.md`, *Correction* in the execution log) |
 | `npx cap sync android` | exit 0; `android/app/src/main/assets/capacitor.config.json` regenerated with `server.appStartPath: "shell.html"` |
 | `JAVA_HOME=<JDK 21> ./gradlew assembleDebug --no-daemon` | **BUILD SUCCESSFUL**, 3m47s → `android/app/build/outputs/apk/debug/app-debug.apk` (the machine's default `JAVA_HOME` is JDK 17, which cannot compile Capacitor's `sourceCompatibility 21`) |
 

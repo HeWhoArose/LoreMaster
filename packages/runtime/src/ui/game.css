@@ -521,6 +521,9 @@
 .cv-credit a { color: inherit; }
 /* the world behind the title: the game's panels and labels are not shown over it */
 #app.on-cover #hud, #app.on-cover #labels { visibility: hidden; }
+/* The story button belongs to play, and it is fixed at z-index 40: over the title it would sit on the new-game panel's
+   own footer, where at 360px wide its centre lands on the creator's Next button (tests/ui/creator.spec.ts). */
+#app.on-cover ~ .narr-btn { display: none; }
 /* the death screen (Minecraft's): a red veil over the stopped world */
 .death { position: absolute; inset: 0; z-index: 60; display: grid; place-items: center; background: radial-gradient(ellipse at center, rgba(120, 10, 10, 0.45), rgba(40, 0, 0, 0.82)); }
 .death.hidden { display: none; }

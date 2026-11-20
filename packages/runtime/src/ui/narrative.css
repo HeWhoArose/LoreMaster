@@ -1,6 +1,8 @@
 /* The story panel: a quiet sheet over the world, the player's words and the narrator's answer. */
+/* Below the game's windows and overlays (z-index 40): at 390px wide the button otherwise sits on an inventory's
+   footer buttons, and the window under it cannot be used. */
 .narr-btn {
-  position: fixed; right: 16px; bottom: 18px; z-index: 40;
+  position: fixed; right: 16px; bottom: 18px; z-index: 39;
   padding: 8px 14px; border: 1px solid #6b5a3e; border-radius: 6px;
   background: rgba(24, 20, 14, 0.9); color: #e8dcc0;
   font: inherit; font-size: 13px; letter-spacing: 0.02em; cursor: pointer;

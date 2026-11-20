@@ -1,0 +1,140 @@
+# Verifying the workspace
+
+One command, one log per check, one honest summary. This is how a change to the game, the runtime, the shell or the
+Android packaging is verified without a partial run being mistaken for a pass.
+
+```bash
+npm run verify              # world → types → unit → build
+npm run verify:ui           # the same, then the Playwright suite
+npm run verify:android      # the same, then the native sync and the debug APK
+node scripts/verify.mjs --only=world,build     # some steps
+node scripts/verify.mjs --list                 # what the steps are
+```
+
+`scripts/verify.mjs` runs its steps in order, in this shell, with a per-step time limit and its own log under
+`verify-logs/<timestamp>/`. A step's exit code is the step's own; the runner keeps going after a failure so the summary
+shows every step's result, and exits non-zero if any of them failed. `verify-logs/` is gitignored; the logs are the
+evidence for a report, not part of the tree.
+
+## The steps
+
+| Step | Command | What a pass means | What it does not mean |
+| --- | --- | --- | --- |
+| `world` | `npm run gen:world` | the 1170-map world and the 1650-type bundle regenerated from content and tools | nothing about the game's behaviour; the files are gitignored build input |
+| `types` | `npm run typecheck` | every project compiles under its own tsconfig, including the package boundaries | no runtime behaviour |
+| `unit` | `vitest run shell.test.ts boundaries.test.ts --testTimeout=180000` | the shell's act mapping and recommendation rules, and the package dependency rules | no page, no rendering, no layout |
+| `build` | `npm run build -w @openworld-game/client` | the shipped web client builds, `dist/` has `index.html`, `shell.html` and the game's pages | that any page renders correctly |
+| `ui` | `playwright test` | see "The UI suite" below | nothing about Android |
+| `android-sync` | `npx cap sync android` | `dist/` copied into the Android project and `capacitor.config.json` rewritten | that the APK runs |
+| `android-apk` | `gradlew assembleDebug` (JDK 21) | the debug APK builds | that it installs or plays — see `docs/phase1/android-device-test.md` |
+
+`npm run verify:android` finds a JDK 21 (from `ANDROID_JAVA_HOME`, or a `jdk-21*` under the usual Windows install roots)
+because the machine's default `JAVA_HOME` here is JDK 17, which cannot compile Capacitor's `sourceRelease 21`.
+
+Prefer `npm run verify:ui` over `npm run test:ui` on a machine that already has a dev server: `test:ui` regenerates the
+world *while* the server is running, and the file churn has been observed to wedge a long-running Vite process. `verify`
+regenerates the world first and lets Playwright start or reuse the server afterwards.
+
+## The UI suite, and what it costs on this machine
+
+Measured on 2026-11-19 on this Windows host (Chromium, `?lang=zh&modder=off`):
+
+| Measurement | Value |
+| --- | --- |
+| The title's menu becomes clickable | 31–41s (headless), 31s (headed), 33s from the production build |
+| Begin adventure → a player in the world | 55–65s from `goto` |
+| Slow or failed network requests during boot | none (the slowest is a ~650 ms module transform) |
+| `world/index.json` (1.4 MB) read + parse in Node | ~35 ms |
+| `bundle.json` (2.5 MB) read + parse in Node | ~65 ms |
+
+So the time is not the dev server (the production build is equally slow), not software rendering (a real window is
+equally slow), and not a failing request. The title is **designed** to hold its menu until the worker has built the world
+and drawn the first frame behind it (`cover.booting`; `BOOT_MS = 60_000` in `packages/runtime/src/ui/cover.ts` is the
+outer limit). That construction takes tens of seconds here and a few seconds on a fast machine. The specs' budgets were
+written for the fast case: 60s (title settings), 90s (companion panels), 120s (game windows), 240s (character creation).
+
+### `UI_BUDGET`
+
+The suite's assertions are unchanged; only the time allowed is scalable:
+
+```bash
+UI_BUDGET=6 npx playwright test     # the same assertions, six times the time
+```
+
+`tests/ui/budget.ts` holds the scale (default `1`, so CI's budgets are exactly as written). Use it — and say so in the
+report — when a machine's boot is slower than the budgets; never by loosening an assertion. On a Linux CI runner the
+default should be enough; if it is not, the machine is telling you the boot got slower, not that the test is wrong.
+
+### Last full run on this host
+
+2026-11-20, `UI_BUDGET=3 UI_WORKERS=1 npx playwright test`: **26 passed in 17.2 min**, exit 0
+(`verify-logs/ui-full3.log`). Slowest: `creator.spec.ts` (zh 5.7 min, en 2.9 min) and `game.spec.ts:16` (4.3 min).
+Repeated after the blip below on a quieter machine: **26 passed in 14.5 min**, exit 0 (`verify-logs/ui-final.log`);
+slowest `game.spec.ts` 6.6 min and `creator.spec.ts` 6.3 min as files, `game.spec.ts:16` 3.5 min.
+`UI_BUDGET=2` is not enough for that last one here — it needs 3.5–4.5 min — so **3 is the local setting**; the assertions
+are identical at any scale.
+
+A later `node scripts/verify.mjs --only=ui` run on the same host lost the browser in both creator specs
+(`Target page, context or browser has been closed`, 771 s, tests 1–19 and 22–26 green); rerunning only those two specs
+passed them at 4.6 and 4.4 min. That is the infrastructure signature described under "Reading a failure" — rerun the
+spec, do not change it. The next full run, same settings, closed the loop at 26/26.
+
+Each step is slow because of the protocol round trip, not the page. In the same loop driven directly against the server,
+a keystroke took 653 ms and a bounding-box query 2.7 s at 1366×768 (0.1–0.2 s at 390×844): the browser's main thread is
+competing with everything else on this machine. On a quiet or CI machine the same loop finished in 164 s total, 30 s of
+which was the title's boot.
+
+### Reading a failure
+
+- `Test timeout of … exceeded` — the budget ran out. Note which wait was in flight (Playwright's call log names it) and
+  compare with the table above before calling it a product bug.
+- A named assertion (`expect(…).toBeVisible()`, `toHaveText`, …) — a behaviour difference. The failing snapshot in
+  `test-results/<spec>/error-context.md` shows what the page actually had.
+- `… intercepts pointer events` — an element sits over the one being clicked. This is how the real defect below was
+  found; it is never "flaky", it is a stacking/overlap bug.
+- `Target page, context or browser has been closed` — infrastructure, not behaviour: the browser process died
+  mid-test. There is no assertion mismatch and no page snapshot to read, because the page is gone. On this host it
+  happened once, on both creator specs within a single `verify --only=ui` run, on a machine with other browsers and
+  IDEs open (2026-11-20); the same two specs passed 4.6 and 4.4 min on an immediate rerun
+  (`verify-logs/creator-rerun.log`), and the earlier full run was 26/26. Remedy: rerun the affected spec before
+  reading anything into it, and when a run dies this way, close other browsers first. Only if it recurs on a quiet
+  machine is there something in the page to chase (renderer OOM), which the browser's stderr would show.
+
+### Four things the suite itself needed
+
+- **`waitForFunction` polled on `requestAnimationFrame`.** A page Chromium treats as hidden throttles rAF, so the gate on
+  `lsw.frame.player` could never evaluate even though the game was running — the failure snapshot showed the HUD and an
+  open world. It now polls on a 250 ms timer (`tests/ui/game.spec.ts`).
+- **Two browsers on one machine starve each other.** With `workers: 2` a page loses frames and panels take tens of
+  seconds to appear; budgets expire with the game running. `UI_WORKERS` sets the count (`playwright.config.ts`), and the
+  verification runner uses one. CI can keep two.
+- **`.first()` bound to a window that was fading out.** The spec opened the next window 150 ms after closing the
+  previous one, and while the old window faded out `.first()` could still resolve to it: `expect(…).toBeVisible()`
+  passed, the element then disappeared, and the following `boundingBox()` waited for a match until the test's budget was
+  gone (`Test timeout … exceeded` naming `locator.boundingBox`). The spec now waits for the match count to settle at one
+  — which is also the behaviour it means to assert, one window at a time — and expects zero after Escape.
+- **Playwright's tracing cost more than the game (2026-11-20).** `trace: 'retain-on-failure'` records a screencast of
+  every rendered frame, and this page draws a world, a minimap and canvas windows continuously. Measured on the same
+  host and the same spec (`game.spec.ts:16`, 24 window/viewport pairs): **12.0 min with tracing on — the 360 s scaled
+  budget ran out and teardown failed with a truncated trace zip**; **3.5 min with `--trace off` — passed**. The same
+  loop driven outside the runner took 2.7 min, so nothing in the page was slow. Tracing is now off unless `UI_TRACE=1`,
+  which is the setting to use for a run you expect to fail and want artifacts from; a failing run otherwise still
+  leaves its screenshot and `error-context.md` under `test-results/`.
+
+## Defects this process has caught
+
+- **2026-11-19 — the Story button covered the character creator's Next at 360 px.** `#app.on-cover ~ .narr-btn` is now
+  hidden while the title owns the screen (`packages/runtime/src/ui/game.css`). Before the fix
+  `document.elementFromPoint` at the centre of `#cvNext` at 360×640 returned `BUTTON.narr-btn`; the creator spec retried
+  the click until its budget expired. The same button also floated over an open window's footer, so it now sits at
+  z-index 39, below the windows (40). `tests/ui/creator.spec.ts` covers it.
+- **2026-11-19 — the inventory overflowed its body at 390 px.** The bag's ten-to-a-row grid kept a 36 px floor per slot,
+  which is 438 px of row in a 314 px column; the window body reported 456 px of content in 350 px. Under 799 px the grid
+  now takes its width from the column (`inventory.css`), and `tests/ui/game.spec.ts` asserts no horizontal overflow in
+  every window at 1366×768, 390×844 and 844×390.
+
+## What is still not covered by any step here
+
+- Live AI: no model service is contacted; the offline recommender is what the tests exercise.
+- Android at runtime: the APK builds, but install/launch/play is a device test (`docs/phase1/android-device-test.md`).
+- The editor and desktop packaging (`npm run editor:build`, `npm run desktop`), which have their own workflows.
