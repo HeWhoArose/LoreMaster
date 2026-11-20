@@ -41,6 +41,63 @@ Prefer `npm run verify:ui` over `npm run test:ui` on a machine that already has 
 world *while* the server is running, and the file churn has been observed to wedge a long-running Vite process. `verify`
 regenerates the world first and lets Playwright start or reuse the server afterwards.
 
+## Continuous integration (GitHub Actions)
+
+`.github/workflows/verify.yml` runs these checks on GitHub's Ubuntu runners, so verifying a change does not need Linux,
+WSL2, Docker or a VM on this machine. It is deliberately **not** `npm run verify`: that runner is this machine's — it
+regenerates the world and bundle in front of everything, finds a JDK 21 under `C:\Program Files`, and can build the APK.
+The workflow keeps the checks, drops the local and device steps (Android is below), and runs them as four independent
+jobs so a slow check does not wait behind another.
+
+| Job | Command | What a pass means | Timeout |
+| --- | --- | --- | --- |
+| `typecheck` | `npm ci` then `npm run typecheck` | all 16 tsconfig projects compile, boundaries included | 30 min |
+| `test` | `npm test -- --testTimeout=120000` | the whole vitest suite, including the Docker-driven `games/openworld/ai/test/repo.test.ts` (a GitHub-hosted Ubuntu runner has Docker) | 45 min |
+| `build` | `npm run build` then `ls` the pages | `gen:world` and the client's vite build produce `dist/index.html`, `shell.html`, `bosses.html`, `looks.html` | 30 min |
+| `ui` | `npx playwright test --workers=2` | the 26 Playwright specs, at their own budgets (`UI_BUDGET` unset) | 60 min |
+
+Every job installs with `npm ci --no-audit --no-fund` from `package-lock.json` (lockfileVersion 3) and `setup-node`
+caches the npm download cache on that lockfile; the UI job also caches `~/.cache/ms-playwright` on it. A step's exit
+code is the job's: `npm ci`, `tsc`, vitest, the build and Playwright each fail the run on their own, and the build job
+additionally fails if `dist/` lacks a page. Only the UI job uploads artifacts (`test-results/` and the dev server's log,
+kept 7 days); every other job's evidence is its log.
+
+### Triggers, and running it by hand
+
+A push to `master`, a pull request into `master`, and `workflow_dispatch` all start it; pushes to `ci/**` start it too,
+so a change to the workflow itself can be proven before it is merged. Pull-request runs of the same branch cancel each
+other; push runs do not. The four jobs are independent — one failing does not stop the others, so a red run still shows
+every check's result.
+
+- **Inspect:** GitHub → Actions → `verify` → the run → a job → its step. The failing step is the one marked red; its log
+  is the same output the command gives locally.
+- **Rerun:** *Re-run failed jobs* on the run page keeps the successful jobs' results. With the GitHub CLI:
+  `gh run list --workflow=verify.yml`, `gh run view <id> --log-failed`, `gh run rerun <id> --failed`.
+- **By hand:** Actions → `verify` → *Run workflow* (branch `master`), or
+  `gh workflow run verify.yml --ref master`.
+
+### The UI job's server
+
+`playwright.config.ts` starts its own server with `npm run dev:client -- --host 127.0.0.1`, and npm passes those
+arguments to itself rather than to vite: vite then binds `localhost`, which resolves to `::1` on the runner, while the
+config polls `127.0.0.1:5173`. The job therefore starts the client itself (`npx vite --host 127.0.0.1 --port 5173
+--strictPort` in `games/openworld/client`) and waits until `ui-lab.html` answers, then runs the suite **with `CI` unset**
+so `reuseExistingServer: !process.env.CI` keeps that server instead of starting a second one. The strict port makes a
+stale server fail the step rather than move to 5174. If a spec fails there, the uploaded `playwright-failure` artifact
+has the screenshot, `error-context.md` and the server's output; the budgets are the specs' own on a runner this fast, so
+a timeout means the boot got slower, not that the scale should be raised.
+
+### Why the root typecheck never finished here (it does now)
+
+Measured on 2026-11-20 on this Windows host, one `tsc -p` per project: `packages/engine` 46 s, `packages/engine/test`
+57 s, `packages/stdlib` 42 s, `packages/format` 36 s, `games/starter` 44 s, `packages/modules` 22 s, `packages/bridge`
+22 s, `packages/runtime` 16 s, `packages/editor` 15 s, `games/openworld/content` 16 s, `games/openworld/client` 24 s,
+`games/openworld/tools` 22 s, `games/openworld/wiki` 28 s, `packages/narration` 20 s, `packages/ai` 32 s,
+`games/openworld/ai` 22 s — **464 s in total, every project exit 0**, a small fraction of the one-hour limit in
+`verify.mjs`. So the earlier "it never finished in an hour" was load and contention (a dev server, browsers and the UI
+suite running beside it), not a project that hangs; the limit stays generous, and a loaded machine is not a reason to
+raise it.
+
 ## The UI suite, and what it costs on this machine
 
 Measured on 2026-11-19 on this Windows host (Chromium, `?lang=zh&modder=off`):

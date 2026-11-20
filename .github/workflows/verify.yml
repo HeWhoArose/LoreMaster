@@ -1,0 +1,135 @@
+# The workspace's verification (docs/verification.md) on GitHub's Ubuntu runners: one job per check, so a slow check
+# does not wait behind another, each job's log names the check that failed, and a step's exit code is the job's.
+#
+# This is not `npm run verify`. That runner is written for this developer's Windows machine: it regenerates the world
+# and bundle serially in front of everything, finds a JDK 21 under `C:\Program Files`, and can run the Android sync and
+# the debug APK. The jobs below are the same checks without the local-only steps, in parallel; Android is not here at
+# all (it needs an SDK and a device, docs/phase1/android-device-test.md).
+#
+# `master` is the branch work lands on; `ci/**` branches run it too, so a change to this file can be proven before it is
+# merged. The editor and desktop packaging are desktop.yml, the wiki is wiki.yml.
+name: verify
+
+on:
+  push:
+    branches: [master, 'ci/**']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The version this workspace is developed on (setup-node's `cache: npm` keys on package-lock.json, lockfileVersion 3).
+  NODE_VERSION: '24'
+
+jobs:
+  typecheck:
+    name: typecheck (every project)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      # `npm ci`, never `npm install`: the lockfile is the resolved tree, and a new dependency without a lockfile entry
+      # fails here instead of being silently added.
+      - run: npm ci --no-audit --no-fund
+      # `typecheck:game` then packages/ai and games/openworld/ai: 16 tsconfig projects, each with its own boundaries.
+      - run: npm run typecheck
+
+  test:
+    name: unit and integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      # The 30 s default is for a quiet machine: the slowest whole-world tests (a night in bed, rising at home) take
+      # about 10 s each on a fast one and run beside the rest. games/openworld/ai/test/repo.test.ts drives Docker, which
+      # a GitHub-hosted Ubuntu runner has; that is why this job is here and not a container of our own.
+      - run: npm test -- --testTimeout=120000
+
+  build:
+    name: web build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      # `gen:world` (1170 maps, the 1650-type bundle) then the client's vite build: the world is gitignored input.
+      - run: npm run build
+      # A build that exits 0 without its pages is not a build. dist/ is what `npx cap sync android` copies.
+      - name: the shipped build has its pages
+        working-directory: games/openworld/client/dist
+        run: ls -l index.html shell.html bosses.html looks.html
+
+  ui:
+    name: Playwright UI suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+      # The specs read the generated world and bundle; a fresh checkout has neither.
+      - run: npm run gen:world
+      # playwright.config.ts starts its own server with `npm run dev:client -- --host 127.0.0.1`, and npm hands those
+      # arguments to itself rather than to vite: vite then binds `localhost`, which resolves to `::1` on this runner,
+      # while the config polls `127.0.0.1:5173`. So the job starts the client on the address the config polls, and the
+      # suite step runs with CI unset — `reuseExistingServer: !process.env.CI` then keeps this server instead of
+      # starting a second one. The port is strict: a stale server fails loudly instead of moving to 5174.
+      - name: start the client on 127.0.0.1:5173
+        working-directory: games/openworld/client
+        run: |
+          nohup npx vite --host 127.0.0.1 --port 5173 --strictPort > "$RUNNER_TEMP/dev-server.log" 2>&1 &
+          for attempt in $(seq 1 120); do
+            if curl -fsS http://127.0.0.1:5173/ui-lab.html > /dev/null; then
+              echo "the client answered 127.0.0.1:5173/ui-lab.html after ${attempt}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "the client did not answer on 127.0.0.1:5173 within 120s"
+          cat "$RUNNER_TEMP/dev-server.log"
+          exit 1
+      # The budgets are the specs' own (UI_BUDGET unset = 1): this runner is the fast case they were written for. If
+      # they run out here, the boot got slower — read docs/verification.md, do not raise the scale in CI.
+      - name: run the suite
+        env:
+          CI: ''
+        run: npx playwright test --workers=2
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-failure
+          # A failing test leaves its screenshot and error-context.md in test-results/; the server's output says
+          # whether the page or the machine failed.
+          path: |
+            test-results/
+            ${{ runner.temp }}/dev-server.log
+          if-no-files-found: warn
+          retention-days: 7
