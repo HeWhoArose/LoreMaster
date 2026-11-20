@@ -62,6 +62,27 @@ code is the job's: `npm ci`, `tsc`, vitest, the build and Playwright each fail t
 additionally fails if `dist/` lacks a page. Only the UI job uploads artifacts (`test-results/` and the dev server's log,
 kept 7 days); every other job's evidence is its log.
 
+The `test` job checks out two commits (`fetch-depth: 2`) because
+`games/openworld/ai/test/drivers.test.ts` builds a workspace of `HEAD~1`: a shallow checkout has no parent, and that
+test then fails for the checkout rather than for the code.
+
+### The suite that job runs is red on `master`, and is not narrowed
+
+`npm test` is run as it is. A CI job that selects only the passing files hides exactly what it exists to find, so the
+`test` job reports the repository's state: on 2026-11-20 at `43515f2a` the full suite has **10 failed tests in two
+files**, and the same two files fail on this Windows host when run alone
+(`npx vitest run games/openworld/ai/test/modder-affordance.test.ts packages/format/test/schema.test.ts` →
+`10 failed | 2 passed`), so this is the tree, not the runner:
+
+- `packages/format/test/schema.test.ts` — `packages/format/schema/map.schema.json` is stale: it lacks the `environment`
+  property the generator now emits from `packages/format/src/files.ts` (`npm run schema` rewrites the committed
+  schemas).
+- `games/openworld/ai/test/modder-affordance.test.ts` — the patch the test places is not accepted, so its later cases
+  assert on records that never arrived (`Cannot read properties of undefined` in `placePatch`, `packages/engine/src/mod.ts:804`).
+
+Until those two are fixed the `test` job — and therefore the run — is red. That is the check telling the truth; the
+workflow is not to be made green by dropping files from the command.
+
 ### Triggers, and running it by hand
 
 A push to `master`, a pull request into `master`, and `workflow_dispatch` all start it; pushes to `ci/**` start it too,
@@ -85,7 +106,9 @@ config polls `127.0.0.1:5173`. The job therefore starts the client itself (`npx 
 so `reuseExistingServer: !process.env.CI` keeps that server instead of starting a second one. The strict port makes a
 stale server fail the step rather than move to 5174. If a spec fails there, the uploaded `playwright-failure` artifact
 has the screenshot, `error-context.md` and the server's output; the budgets are the specs' own on a runner this fast, so
-a timeout means the boot got slower, not that the scale should be raised.
+a timeout means the boot got slower, not that the scale should be raised. Observed so far: the job passed in 4.5 minutes on
+2026-11-20 (run 44747293399); an earlier run of the same job on the same machine class failed at the suite step, and its
+`playwright-failure` artifact — not a raised `UI_BUDGET` — is where to look if that recurs.
 
 ### Why the root typecheck never finished here (it does now)
 

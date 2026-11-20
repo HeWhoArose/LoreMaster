@@ -50,7 +50,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      # games/openworld/ai/test/drivers.test.ts builds a workspace of HEAD's parent (`git rev-parse HEAD~1`): a shallow
+      # checkout has no parent, and that test fails for the checkout rather than for the code.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
