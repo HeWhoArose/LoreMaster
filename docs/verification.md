@@ -54,7 +54,7 @@ jobs so a slow check does not wait behind another.
 | `typecheck` | `npm ci` then `npm run typecheck` | all 16 tsconfig projects compile, boundaries included | 30 min |
 | `test` | `npm test -- --testTimeout=120000` | the whole vitest suite, including the Docker-driven `games/openworld/ai/test/repo.test.ts` (a GitHub-hosted Ubuntu runner has Docker) | 45 min |
 | `build` | `npm run build` then `ls` the pages | `gen:world` and the client's vite build produce `dist/index.html`, `shell.html`, `boss-gallery.html`, `looks.html` | 30 min |
-| `ui` | `npx playwright test --workers=2` | the 26 Playwright specs, at their own budgets (`UI_BUDGET` unset) | 60 min |
+| `ui` | `npx playwright test --workers=1` | the 26 Playwright specs, at their own budgets (`UI_BUDGET` unset) | 60 min |
 
 Every job installs with `npm ci --no-audit --no-fund` from `package-lock.json` (lockfileVersion 3) and `setup-node`
 caches the npm download cache on that lockfile; the UI job also caches `~/.cache/ms-playwright` on it. A step's exit
@@ -80,7 +80,14 @@ files**, and the same two files fail on this Windows host when run alone
 - `games/openworld/ai/test/modder-affordance.test.ts` — the patch the test places is not accepted, so its later cases
   assert on records that never arrived (`Cannot read properties of undefined` in `placePatch`, `packages/engine/src/mod.ts:804`).
 
-Until those two are fixed the `test` job — and therefore the run — is red. That is the check telling the truth; the
+On the runner one more test fails: `games/openworld/ai/test/drivers.test.ts` (`engine tasks` — "are real fail-to-pass
+tasks") times out at its own 600 s limit (run 44763479839). It sets that timeout on the test itself, so the job's
+`--testTimeout=120000` does not apply to it. The test builds a container workspace and runs the engine's vitest suite in
+it twice per task (up to 300 s each) for two tasks, which is more work than a four-core runner fits in 600 s. It is the
+one failure here that may be the runner's speed rather than the tree: whether it fails on a quiet machine has not been
+measured, and its absence or presence is not evidence about the code either way.
+
+Until those are fixed the `test` job — and therefore the run — is red. That is the check telling the truth; the
 workflow is not to be made green by dropping files from the command.
 
 ### Triggers, and running it by hand
@@ -107,9 +114,12 @@ config polls `127.0.0.1:5173`. The job therefore starts the client itself (`npx 
 so `reuseExistingServer: !process.env.CI` keeps that server instead of starting a second one. The strict port makes a
 stale server fail the step rather than move to 5174. If a spec fails there, the uploaded `playwright-failure` artifact
 has the screenshot, `error-context.md` and the server's output; the budgets are the specs' own on a runner this fast, so
-a timeout means the boot got slower, not that the scale should be raised. Observed so far: the job passed in 4.5 minutes on
-2026-11-20 (run 44747293399); an earlier run of the same job on the same machine class failed at the suite step, and its
-`playwright-failure` artifact — not a raised `UI_BUDGET` — is where to look if that recurs.
+a timeout means the boot got slower, not that the scale should be raised.
+
+Observed on 2026-11-20, all on `ubuntu-latest`: the job passed in 4.5 minutes with `--workers=2` (run 44747293399), then
+failed at the suite step with the same setting on two of four runs — two Chromium instances each building and drawing the
+world starve each other. With `--workers=1` it passed in 8 minutes (run 44763479839). The assertions are the same at
+either setting; if a spec fails again, its `playwright-failure` artifact — not a raised `UI_BUDGET` — is where to look.
 
 ### Why the root typecheck never finished here (it does now)
 
