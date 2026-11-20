@@ -21,8 +21,10 @@ permissions:
   contents: read
 
 concurrency:
+  # One run per branch at a time, and a newer push replaces the run it supersedes — otherwise a fix pushed while a run
+  # is in flight waits behind it for half an hour. `master` is never cancelled: its runs are the record of what landed.
   group: verify-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 env:
   # The version this workspace is developed on (setup-node's `cache: npm` keys on package-lock.json, lockfileVersion 3).

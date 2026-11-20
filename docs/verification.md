@@ -86,9 +86,10 @@ workflow is not to be made green by dropping files from the command.
 ### Triggers, and running it by hand
 
 A push to `master`, a pull request into `master`, and `workflow_dispatch` all start it; pushes to `ci/**` start it too,
-so a change to the workflow itself can be proven before it is merged. Pull-request runs of the same branch cancel each
-other; push runs do not. The four jobs are independent — one failing does not stop the others, so a red run still shows
-every check's result.
+so a change to the workflow itself can be proven before it is merged. One run per branch at a time, and a newer push
+replaces the run it supersedes (a fix pushed while a run is in flight would otherwise wait behind it); runs on `master`
+are never cancelled, because they are the record of what landed. The four jobs are independent — one failing does not
+stop the others, so a red run still shows every check's result.
 
 - **Inspect:** GitHub → Actions → `verify` → the run → a job → its step. The failing step is the one marked red; its log
   is the same output the command gives locally.
