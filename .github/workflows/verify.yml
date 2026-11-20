@@ -125,7 +125,33 @@ jobs:
       - name: run the suite
         env:
           CI: ''
-        run: npx playwright test --workers=2
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-report.json
+        run: npx playwright test --workers=2 --reporter=list --reporter=json
+      # A red step says only "exit code 1" in the run's annotations, and a job's log needs admin rights to download. So
+      # the failing specs are lifted out of the JSON report into annotations: the run page names them, and they can be
+      # read from the API (`/check-runs/<job>/annotations`) without a browser.
+      - name: name the failing specs
+        if: failure()
+        run: |
+          node -e '
+            const { existsSync, readFileSync } = require("node:fs")
+            const file = process.env.RUNNER_TEMP + "/playwright-report.json"
+            if (!existsSync(file)) { console.log("::error::the suite left no JSON report (it failed before a test ran)"); process.exit(1) }
+            const report = JSON.parse(readFileSync(file, "utf8"))
+            let failed = 0
+            const walk = (suite) => {
+              for (const spec of suite.specs ?? []) for (const test of spec.tests ?? []) {
+                const result = (test.results ?? []).at(-1)
+                if (test.ok || !result) continue
+                failed++
+                const message = String(result.error?.message ?? result.status).split("\n")[0].slice(0, 400)
+                console.log(`::error::${spec.file} :: ${spec.title} — ${result.status}: ${message}`)
+              }
+              for (const child of suite.suites ?? []) walk(child)
+            }
+            for (const suite of report.suites ?? []) walk(suite)
+            console.log(`${failed} failing test(s)`)
+          '
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
