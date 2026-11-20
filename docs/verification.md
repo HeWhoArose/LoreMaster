@@ -14,7 +14,13 @@ node scripts/verify.mjs --list                 # what the steps are
 `scripts/verify.mjs` runs its steps in order, in this shell, with a per-step time limit and its own log under
 `verify-logs/<timestamp>/`. A step's exit code is the step's own; the runner keeps going after a failure so the summary
 shows every step's result, and exits non-zero if any of them failed. `verify-logs/` is gitignored; the logs are the
-evidence for a report, not part of the tree.
+evidence for a report, not part of the tree. `summary.json` records the commit whose tree was verified.
+
+Two things the runner learned the hard way. A step over its limit has its **whole process tree** stopped: the step runs
+under a shell, so killing the shell reaches only the shell, and on Windows `npm`, `node` and `vite` keep running and
+keep the log's pipe open, which leaves the runner waiting past its own limit — `taskkill /T` (and a detached group on
+POSIX) stops the tree, and the log is closed after the kill whether or not the pipes shut. And an **unknown step name,
+or a selection that matches nothing, is an error** (exit 2): `--only=uis` used to select zero steps and print `PASS`.
 
 ## The steps
 

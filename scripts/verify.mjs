@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // The workspace's verification run (docs/verification.md): every check, in a fixed order, each with its own log and
 // its own time limit, so one slow step neither hides the rest nor reports a partial run as a pass. A step's exit code
-// is the step's; the runner exits non-zero if any step failed.
+// is the step's; the runner exits non-zero if any step failed, and an unknown step name is an error, not an empty
+// pass. A step over its limit has its whole process tree stopped: killing the shell alone leaves npm, node and vite
+// running on Windows, and a survivor that holds its output open would keep the runner waiting past its own limit.
 //
 //   node scripts/verify.mjs                 the core set (world, types, unit tests, build)
 //   node scripts/verify.mjs --ui            …and the Playwright UI suite
@@ -9,7 +11,7 @@
 //   node scripts/verify.mjs --only=build    one or more steps by name, comma-separated
 //   node scripts/verify.mjs --list          the step names
 
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { createWriteStream, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -41,6 +43,39 @@ function java21() {
 }
 
 const jdk21 = java21()
+
+/**
+ * Stops a step and everything it started. The step runs under a shell, so `child.kill()` reaches only the shell: on
+ * Windows `taskkill /T` walks the tree, and on POSIX the step is spawned detached so its whole group has one id.
+ */
+function stopTree(pid) {
+  if (process.platform === 'win32') {
+    try {
+      spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' })
+    } catch {
+      /* already gone */
+    }
+    return
+  }
+  try {
+    process.kill(-pid, 'SIGKILL')
+  } catch {
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
+/** The receipt says which tree it verified; a local run has no GIT_COMMIT in its environment. */
+function headCommit() {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim()
+  } catch {
+    return null
+  }
+}
 
 const steps = [
   {
@@ -102,7 +137,20 @@ if (flags.has('--list')) {
   process.exit(0)
 }
 
+if (only) {
+  const known = steps.map((s) => s.name)
+  const unknown = only.filter((name) => !known.includes(name))
+  if (unknown.length) {
+    console.error(`[verify] no such step: ${unknown.join(', ')} — run --list for the names`)
+    process.exit(2)
+  }
+}
 const selected = steps.filter((s) => (only ? only.includes(s.name) : !s.optional))
+if (!selected.length) {
+  // An empty run looks exactly like a pass in a log, so it is not one.
+  console.error('[verify] no steps selected — nothing to verify')
+  process.exit(2)
+}
 const stamp = new Date().toISOString().replace(/[:.]/g, '-')
 const outDir = resolve(root, 'verify-logs', stamp)
 mkdirSync(outDir, { recursive: true })
@@ -113,20 +161,39 @@ function run(step) {
     const logPath = resolve(outDir, `${step.name}.log`)
     const log = createWriteStream(logPath)
     log.write(`$ ${step.command}\n\n`)
-    const child = spawn(step.command, { cwd: step.cwd ?? root, shell, env: { ...process.env, ...step.env } })
+    // Detached on POSIX only: it gives the step's tree one id to kill. Windows needs no flag for that (taskkill /T
+    // walks the tree), and a detached console there would outlive the runner.
+    const child = spawn(step.command, {
+      cwd: step.cwd ?? root,
+      shell,
+      env: { ...process.env, ...step.env },
+      detached: process.platform !== 'win32',
+    })
     let timedOut = false
-    const timer = setTimeout(() => {
+    let settled = false
+    let timer
+    let drain
+    const finish = (code, note) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      clearTimeout(drain)
+      if (note) log.write(note)
+      log.end()
+      done({ name: step.name, code, seconds: Math.round((Date.now() - started) / 100) / 10, log: logPath })
+    }
+    timer = setTimeout(() => {
       timedOut = true
       log.write(`\n[verify] time limit ${Math.round(step.timeoutMs / 1000)}s reached: stopping the step\n`)
-      child.kill()
+      stopTree(child.pid)
+      // Settle on the limit, not on the step being polite: a survivor holding stdout open keeps 'close' from firing,
+      // which is the failure this limit exists for.
+      drain = setTimeout(() => finish('timeout', "[verify] the step's output stayed open after the kill; the log was closed anyway\n"), 15_000)
     }, step.timeoutMs)
     child.stdout.pipe(log)
     child.stderr.pipe(log)
-    child.on('close', (code) => {
-      clearTimeout(timer)
-      log.end()
-      done({ name: step.name, code: timedOut ? 'timeout' : code, seconds: Math.round((Date.now() - started) / 100) / 10, log: logPath })
-    })
+    child.on('error', (error) => finish(`spawn failed: ${error.message}`))
+    child.on('close', (code) => finish(timedOut ? 'timeout' : code))
   })
 }
 
@@ -140,7 +207,7 @@ for (const step of selected) {
 }
 
 const skipped = steps.filter((s) => !selected.includes(s)).map((s) => s.name)
-const summary = { at: new Date().toISOString(), commit: process.env.GIT_COMMIT ?? null, passed: results.every((r) => r.code === 0), steps: results, skipped }
+const summary = { at: new Date().toISOString(), commit: process.env.GIT_COMMIT ?? headCommit(), passed: results.every((r) => r.code === 0), steps: results, skipped }
 writeFileSync(resolve(outDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`)
 
 console.log(`\n${summary.passed ? 'PASS' : 'FAIL'} — ${results.length} step(s), logs in verify-logs/${stamp}`)
