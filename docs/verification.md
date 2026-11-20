@@ -194,7 +194,8 @@ which was the title's boot.
   open world. It now polls on a 250 ms timer (`tests/ui/game.spec.ts`).
 - **Two browsers on one machine starve each other.** With `workers: 2` a page loses frames and panels take tens of
   seconds to appear; budgets expire with the game running. `UI_WORKERS` sets the count (`playwright.config.ts`), and the
-  verification runner uses one. CI can keep two.
+  verification runner uses one. The CI workflow tries one for the same reason: with two, its UI job failed at the suite
+  step on two of four runs on a four-core runner, and passed on the other two.
 - **`.first()` bound to a window that was fading out.** The spec opened the next window 150 ms after closing the
   previous one, and while the old window faded out `.first()` could still resolve to it: `expect(…).toBeVisible()`
   passed, the element then disappeared, and the following `boundingBox()` waited for a match until the test's budget was

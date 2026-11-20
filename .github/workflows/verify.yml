@@ -124,11 +124,15 @@ jobs:
           exit 1
       # The budgets are the specs' own (UI_BUDGET unset = 1): this runner is the fast case they were written for. If
       # they run out here, the boot got slower — read docs/verification.md, do not raise the scale in CI.
+      # One worker, for the reason the config gives for two saturating a developer machine: two Chromium instances
+      # building the world and drawing it starve each other, and the symptom is a spec timing out with the game
+      # running. With `--workers=2` this job failed at the suite step on two of four runs; the assertions are the same
+      # at any worker count, and one costs a few minutes on a four-core runner.
       - name: run the suite
         env:
           CI: ''
           PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/playwright-report.json
-        run: npx playwright test --workers=2 --reporter=list --reporter=json
+        run: npx playwright test --workers=1 --reporter=list --reporter=json
       # A red step says only "exit code 1" in the run's annotations, and a job's log needs admin rights to download. So
       # the failing specs are lifted out of the JSON report into annotations: the run page names them, and they can be
       # read from the API (`/check-runs/<job>/annotations`) without a browser.
